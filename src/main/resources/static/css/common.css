@@ -1,0 +1,508 @@
+/* ===================================================================
+ *  common.css - 3PL Fulfillment System 공통 스타일
+ * ================================================================ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    font-family: "Noto Sans KR", "Malgun Gothic", "맑은 고딕", "Segoe UI", sans-serif;
+    color: #2c3e50;
+    background-color: #f4f6f9;
+    line-height: 1.55;
+    font-size: 15px;               /* 14 → 15 약간 업 */
+}
+
+a {
+    color: #3a6ea5;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- Layout : Sidebar + Main ----------
+ *  body 는 flex row,  .app-main 은 일반 블록(아래로 자연 적층)
+ *  → header / content / footer 이 가로로 나열되는 현상 방지
+ * --------------------------------------------- */
+html, body {
+    display: block !important;     /* 외부 스타일이 body 를 flex 로 잡는 경우 방지 */
+}
+
+.app-shell {
+    display: flex;
+    flex-direction: row;            /* 명시적으로 row */
+    align-items: stretch;
+    min-height: 100vh;
+    width: 100%;
+}
+
+.app-main {
+    flex: 1 1 auto;
+    display: block;                 /* 핵심 — 자식 요소가 위에서 아래로 자연 적층 */
+    min-width: 0;                   /* flex 자식의 컨텐츠 폭 폭주 방지 */
+}
+
+.app-main > header,
+.app-main > .content-wrapper,
+.app-main > footer {
+    display: block;                 /* 혹시 모를 flex 영향 차단 */
+    width: 100%;
+}
+
+.content-wrapper {
+    padding: 28px 36px;
+    width: 100%;                   /* 풀 사이즈 */
+}
+
+/* ---------- List Page Header (제목 + 부제) ---------- */
+.list-title-block {
+    margin-bottom: 16px;
+}
+.list-title-block h2 {
+    font-size: 20px;
+    color: #1f3a5f;
+    margin-bottom: 4px;
+}
+.list-title-block .subtitle {
+    color: #7a8a99;
+    font-size: 12.5px;
+}
+
+/* ---------- Filter Row (셀렉트 박스들) ---------- */
+.filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px 16px;
+    margin-bottom: 14px;
+}
+.filter-row .filter-cell label {
+    display: block;
+    font-size: 11.5px;
+    color: #7a8a99;
+    margin-bottom: 4px;
+}
+.filter-row .filter-cell select,
+.filter-row .filter-cell input {
+    width: 100%;
+    height: 36px;
+}
+
+/* ---------- Right-side Drawer (슬라이드 등록 패널) ---------- */
+.drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.18s ease;
+    z-index: 100;
+}
+.drawer-overlay.is-open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 460px;
+    max-width: 92vw;
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: -6px 0 18px rgba(0, 0, 0, 0.12);
+    transform: translateX(100%);
+    transition: transform 0.22s ease;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+}
+.drawer.is-open {
+    transform: translateX(0);
+}
+
+.drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e6eaf0;
+}
+.drawer-header h3 {
+    font-size: 16px;
+    color: #1f3a5f;
+}
+.drawer-close {
+    background: transparent;
+    border: 0;
+    font-size: 22px;
+    color: #98a2ad;
+    cursor: pointer;
+    line-height: 1;
+}
+.drawer-close:hover { color: #1f3a5f; }
+
+.drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.drawer-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid #e6eaf0;
+    background: #fafbfc;
+}
+
+/* ---------- Pagination ---------- */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: #6c7a89;
+}
+.pagination .pager {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.pagination .pager .page-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #d8dee5;
+    background: #ffffff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.pagination .pager .page-btn.active {
+    background: #3a6ea5;
+    color: #ffffff;
+    border-color: #3a6ea5;
+}
+.pagination .total-count {
+    color: #6c7a89;
+}
+
+/* ---------- Page header ---------- */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 50px;
+    margin-bottom: 20px;
+}
+
+.page-header h2 {
+    font-size: 22px;
+    color: #1f3a5f;
+}
+
+.page-header .breadcrumb {
+    color: #7a8a99;
+    font-size: 12px;
+}
+
+/* ---------- Card ---------- */
+.card {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    padding: 24px;
+    margin-bottom: 20px;
+    overflow-x: auto;          /* 컬럼 많은 테이블은 카드 안에서 가로 스크롤 */
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f3a5f;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e6eaf0;
+    padding-bottom: 8px;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    color: #2c3e50;
+}
+
+.btn:hover {
+    background: #f1f3f5;
+}
+
+.btn-primary {
+    background: #3a6ea5;
+    color: #ffffff;
+    border-color: #3a6ea5;
+}
+
+.btn-primary:hover {
+    background: #305a87;
+    border-color: #305a87;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.btn-success {
+    background: #2e8b57;
+    color: #ffffff;
+    border-color: #2e8b57;
+}
+
+.btn-success:hover {
+    background: #266d44;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.btn-warning {
+    background: #e0a800;
+    color: #ffffff;
+    border-color: #e0a800;
+}
+
+.btn-warning:hover {
+    background: #b78900;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.btn-danger {
+    background: #c0392b;
+    color: #ffffff;
+    border-color: #c0392b;
+}
+
+.btn-danger:hover {
+    background: #97291f;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.btn-default {
+    background: #f4f6f9;
+    color: #2c3e50;
+    border-color: #d0d7de;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ---------- Forms ---------- */
+.form-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.form-row > label {
+    flex: 0 0 130px;
+    font-weight: 600;
+    color: #36506b;
+}
+
+.form-row > .form-control,
+.form-row > input,
+.form-row > select,
+.form-row > textarea {
+    flex: 1;
+}
+
+.form-control,
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="email"],
+select,
+textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #cdd5de;
+    border-radius: 4px;
+    background: #ffffff;
+    font-size: 13px;
+    color: #2c3e50;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: #3a6ea5;
+    box-shadow: 0 0 0 2px rgba(58, 110, 165, 0.15);
+}
+
+.form-actions {
+    margin-top: 18px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* ---------- Table ---------- */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    font-size: 13px;
+    table-layout: auto;
+}
+
+.data-table th,
+.data-table td {
+    white-space: nowrap;       /* 셀 내용 줄바꿈 방지 (필요시 가로 스크롤로 처리) */
+}
+
+/* 액션(수정/삭제) 컬럼은 form 두 개가 줄바꿈되지 않도록 inline-flex 처리 */
+.data-table td .btn-sm + .btn-sm,
+.data-table td form + form {
+    margin-left: 4px;
+}
+
+.data-table td form {
+    display: inline-block;
+}
+
+.data-table thead {
+    background: #f1f4f8;
+}
+
+.data-table thead th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #36506b;
+    border-bottom: 2px solid #d8dee5;
+    white-space: nowrap;
+}
+
+.data-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eef0f3;
+    vertical-align: middle;
+}
+
+.data-table tbody tr:hover {
+    background: #fafbfc;
+}
+
+.data-table .center {
+    text-align: center;
+}
+
+.data-table .right {
+    text-align: right;
+}
+
+.data-table .table-empty {
+    text-align: center;
+    color: #98a2ad;
+    padding: 30px 12px;
+}
+
+/* ---------- Badge ---------- */
+.badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: #d6f0e1;
+    color: #2e8b57;
+}
+
+.badge-warning {
+    background: #fcecc6;
+    color: #b18000;
+}
+
+.badge-danger {
+    background: #f8d7da;
+    color: #b02a37;
+}
+
+.badge-info {
+    background: #cfe2f3;
+    color: #2c5282;
+}
+
+/* ---------- Alert ---------- */
+.alert {
+    padding: 12px 14px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.alert-error {
+    background: #f8d7da;
+    color: #842029;
+    border: 1px solid #f5c2c7;
+}
+
+.alert-info {
+    background: #cfe2ff;
+    color: #084298;
+    border: 1px solid #b6d4fe;
+}
+
+/* ---------- Search bar ---------- */
+.search-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;           /* 좁은 화면에서 검색 영역 자동 줄바꿈 */
+}
+
+.search-bar select { width: 140px; }
+.search-bar input  { width: 240px; }
+
+.search-bar select,
+.search-bar input {
+    height: 36px;
+}
+
+/* flex-between 이 자식 너비로 인해 깨지는 것 방지 */
+.flex-between {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ---------- Utility ---------- */
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.mt-10 { margin-top: 10px; }
+.mt-20 { margin-top: 20px; }
+.mb-10 { margin-bottom: 10px; }
+.mb-20 { margin-bottom: 20px; }
+.flex { display: flex; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.gap-8 { gap: 8px; }

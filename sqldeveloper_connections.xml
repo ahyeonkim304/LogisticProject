@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  SQL Developer 연결 정보 import 파일
+
+  사용 방법:
+   1) SQL Developer 실행
+   2) 좌측 Connections 패널에서 우클릭 → "Import Connections..."
+   3) 이 파일(sqldeveloper_connections.xml) 선택
+   4) ot1-local, sys-admin 두 개를 체크 후 OK
+   5) 비밀번호는 Save Password 가 false 라 처음 접속 시 한 번 입력 필요
+-->
+<References xmlns="http://xmlns.oracle.com/adf/jndi">
+
+   <Reference name="ot1-local" className="oracle.jdeveloper.db.adapter.DatabaseProvider">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory"/>
+      <RefAddresses>
+         <StringRefAddr addrType="subtype"><Contents>oraJDBC</Contents></StringRefAddr>
+         <StringRefAddr addrType="user"><Contents>ot1</Contents></StringRefAddr>
+         <StringRefAddr addrType="hostname"><Contents>localhost</Contents></StringRefAddr>
+         <StringRefAddr addrType="port"><Contents>1521</Contents></StringRefAddr>
+         <StringRefAddr addrType="sid"><Contents>xe</Contents></StringRefAddr>
+         <StringRefAddr addrType="customUrl"><Contents>jdbc:oracle:thin:@localhost:1521:xe</Contents></StringRefAddr>
+         <StringRefAddr addrType="driver"><Contents>oracle.jdbc.OracleDriver</Contents></StringRefAddr>
+         <StringRefAddr addrType="SavePassword"><Contents>false</Contents></StringRefAddr>
+         <StringRefAddr addrType="ConnName"><Contents>ot1-local</Contents></StringRefAddr>
+      </RefAddresses>
+   </Reference>
+
+   <Reference name="sys-admin" className="oracle.jdeveloper.db.adapter.DatabaseProvider">
+      <Factory className="oracle.jdeveloper.db.adapter.DatabaseProviderFactory"/>
+      <RefAddresses>
+         <StringRefAddr addrType="subtype"><Contents>oraJDBC</Contents></StringRefAddr>
+         <StringRefAddr addrType="user"><Contents>system</Contents></StringRefAddr>
+         <StringRefAddr addrType="hostname"><Contents>localhost</Contents></StringRefAddr>
+         <StringRefAddr addrType="port"><Contents>1521</Contents></StringRefAddr>
+         <StringRefAddr addrType="sid"><Contents>xe</Contents></StringRefAddr>
+         <StringRefAddr addrType="customUrl"><Contents>jdbc:oracle:thin:@localhost:1521:xe</Contents></StringRefAddr>
+         <StringRefAddr addrType="driver"><Contents>oracle.jdbc.OracleDriver</Contents></StringRefAddr>
+         <StringRefAddr addrType="SavePassword"><Contents>false</Contents></StringRefAddr>
+         <StringRefAddr addrType="ConnName"><Contents>sys-admin</Contents></StringRefAddr>
+      </RefAddresses>
+   </Reference>
+
+</References>

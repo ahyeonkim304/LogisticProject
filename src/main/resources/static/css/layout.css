@@ -1,0 +1,223 @@
+/* ===================================================================
+ *  layout.css - Sidebar + Header 레이아웃 전용 스타일
+ * ================================================================ */
+
+/* ---------- Top header ---------- */
+.app-header {
+    height: 60px;
+    background: #ffffff;
+    border-bottom: 1px solid #e6eaf0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.app-header .brand {
+    font-weight: 700;
+    color: #1f3a5f;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-header .brand .logo-mark {
+    width: 30px;
+    height: 30px;
+    background: #3a6ea5;
+    border-radius: 6px;
+    color: #ffffff;
+    text-align: center;
+    line-height: 30px;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.app-header .user-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #6c7a89;
+    font-size: 13px;
+}
+
+.app-header .user-area .user-name {
+    color: #1f3a5f;
+    font-weight: 600;
+}
+
+.app-header .user-area .logout-link {
+    color: #c0392b;
+    font-size: 12px;
+}
+
+/* ---------- Sidebar ---------- */
+.app-sidebar {
+    width: 220px;
+    background: #1f3a5f;
+    color: #d3dbe5;
+    flex: 0 0 220px;           /* shrink 0 — 컨텐츠가 넓어져도 사이드바는 고정 */
+    display: block;            /* 사이드바 내부도 단순 블록 */
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.app-sidebar .nav,
+.app-sidebar .nav-item,
+.app-sidebar .nav-section {
+    display: block;
+    list-style: none;
+}
+
+.app-sidebar .sidebar-title {
+    padding: 18px 20px;
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 14px;
+    border-bottom: 1px solid #2b4d7d;
+    letter-spacing: 0.5px;
+}
+
+.app-sidebar .nav {
+    list-style: none;
+    padding: 8px 0;
+    flex: 1;
+}
+
+.app-sidebar .nav .nav-section {
+    padding: 12px 20px 4px;
+    font-size: 11px;
+    color: #8aa0bd;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.app-sidebar .nav-item a {
+    display: block;
+    padding: 10px 20px;
+    color: #d3dbe5;
+    font-size: 13px;
+    border-left: 3px solid transparent;
+}
+
+.app-sidebar .nav-item a:hover {
+    background: #2b4d7d;
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.app-sidebar .nav-item.active a {
+    background: #2b4d7d;
+    color: #ffffff;
+    border-left-color: #ffffff;
+    font-weight: 600;
+}
+
+.app-sidebar .sidebar-footer {
+    padding: 14px 20px;
+    border-top: 1px solid #2b4d7d;
+    font-size: 11px;
+    color: #8aa0bd;
+}
+
+/* ---------- Login layout (별도) ---------- */
+.login-shell {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1f3a5f, #3a6ea5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-card {
+    width: 380px;
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 36px 32px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.login-card h1 {
+    font-size: 22px;
+    color: #1f3a5f;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+.login-card .login-sub {
+    text-align: center;
+    color: #7a8a99;
+    margin-bottom: 24px;
+    font-size: 13px;
+}
+
+.login-card .login-form .form-row {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 12px;
+}
+
+.login-card .login-form .form-row > label {
+    flex: none;
+    font-size: 12px;
+    color: #36506b;
+    margin-bottom: 4px;
+}
+
+.login-card .login-form input {
+    height: 40px;
+}
+
+.login-card .login-form .btn-primary {
+    width: 100%;
+    height: 42px;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* Footer (간단) */
+.app-footer {
+    text-align: center;
+    color: #98a2ad;
+    font-size: 11px;
+    padding: 16px;
+    border-top: 1px solid #e6eaf0;
+    background: #ffffff;
+}
+
+/* Dashboard 카드 */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.metric-card {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #3a6ea5;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.metric-card .metric-label {
+    color: #7a8a99;
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+
+.metric-card .metric-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1f3a5f;
+}
+
+.metric-card.warn { border-left-color: #e0a800; }
+.metric-card.danger { border-left-color: #c0392b; }
+.metric-card.success { border-left-color: #2e8b57; }
