@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>대시보드 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header">
+        <h1 class="page-title">대시보드</h1>
+      </header>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:600;color:#374151">주문 현황</span>
+        <span style="font-size:11px;color:var(--color-muted)">기준: 전체 누적</span>
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;margin-top:4px">
+        <span style="font-size:13px;font-weight:600;color:#374151">재고 / 입출고</span>
+        <span style="font-size:11px;color:var(--color-muted)">기준: 전체 누적</span>
+      </div>
+      <div class="summary-grid" id="summary-grid"></div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">최근 재고 변동 (10건)</h2></div>
+        <div class="card-body">
+          <table class="data-table">
+            <thead><tr><th>일시</th><th>SKU</th><th>상품명</th><th>유형</th><th>수량</th><th>참조</th></tr></thead>
+            <tbody id="log-body"><tr><td colspan="6" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script th:src="@{/js/app.js}"></script>
+<script>
+const STATUS_LABELS = {
+  ORDER_CREATED:'주문 생성', ORDER_HOLD:'보류',
+  INBOUND_PENDING:'입고 대기', INBOUND_COMPLETED:'입고 완료',
+  OUTBOUND_PENDING:'출고 대기', OUTBOUND_COMPLETED:'출고 완료', SHIPPED:'출하 완료'
+};
+const STATUS_CLASSES = {
+  ORDER_CREATED:'stat-created', ORDER_HOLD:'stat-hold',
+  INBOUND_PENDING:'stat-inbound-pending', INBOUND_COMPLETED:'stat-inbound-done',
+  OUTBOUND_PENDING:'stat-outbound-pending', OUTBOUND_COMPLETED:'stat-outbound-done', SHIPPED:'stat-shipped'
+};
+async function load() {
+  const d = await apiFetch('GET','/dashboard');
+  if (!d) return;
+  // 통계 카드
+  const statuses = ['ORDER_CREATED','INBOUND_PENDING','INBOUND_COMPLETED','OUTBOUND_PENDING','OUTBOUND_COMPLETED','SHIPPED'];
+  document.getElementById('stats-grid').innerHTML = statuses.map(s =>
+    `<div class="stat-card ${STATUS_CLASSES[s]}">
+      <div class="stat-label">${STATUS_LABELS[s]}</div>
+      <div class="stat-value">${(d.orderCountByStatus && d.orderCountByStatus[s]) ?? 0}</div>
+    </div>`).join('');
+  // 요약 카드
+  document.getElementById('summary-grid').innerHTML = [
+    {icon:'📦',label:'전체 재고',val:d.totalStock},
+    {icon:'📥',label:'총 입고 수량',val:d.totalInbound},
+    {icon:'📤',label:'총 출고 수량',val:d.totalOutbound}
+  ].map(({icon,label,val}) =>
+    `<div class="summary-card">
+      <div class="summary-icon">${icon}</div>
+      <div><div class="summary-label">${label}</div><div class="summary-value">${val ?? 0}</div></div>
+    </div>`).join('');
+  // 로그 테이블
+  const logs = d.recentLogs ?? [];
+  document.getElementById('log-body').innerHTML = !logs.length
+    ? '<tr><td colspan="6" class="text-center text-muted">재고 로그가 없습니다.</td></tr>'
+    : logs.map(l =>
+      `<tr>
+        <td>${fmtDate(l.createdAt)}</td>
+        <td><code>${escHtml(l.productSku)}</code></td>
+        <td>${escHtml(l.productName)}</td>
+        <td><span class="badge ${escHtml(l.typeBadgeClass)}">${escHtml(l.typeLabel)}</span></td>
+        <td>${l.quantity}</td>
+        <td>${l.referenceId ? `${escHtml(l.referenceType)} #${l.referenceId}` : '<span style="color:var(--color-muted)">직접 입력</span>'}</td>
+      </tr>`).join('');
+}
+load();
+</script>
+</body>
+</html>

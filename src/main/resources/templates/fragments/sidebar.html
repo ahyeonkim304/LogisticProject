@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<nav th:fragment="sidebar" class="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-icon">📦</span>
+    <span class="brand-text">WMS</span>
+  </div>
+  <ul class="sidebar-menu">
+    <li class="nav-section">운영</li>
+    <li><a href="/" data-exact="true"><span class="menu-icon">🏠</span> 대시보드</a></li>
+
+    <th:block th:if="${user != null and user.admin}">
+      <li class="nav-section">계정</li>
+      <li><a href="/admin/accounts"><span class="menu-icon">👥</span> 계정 관리</a></li>
+    </th:block>
+
+    <li class="nav-section">상품</li>
+    <li><a href="/products"><span class="menu-icon">🛍</span> 상품 관리</a></li>
+
+    <li class="nav-section">재고</li>
+    <li class="menu-group">
+      <a href="/inventory"><span class="menu-icon">📦</span> 재고 관리</a>
+      <a href="/inventory/history" class="menu-sub"><span class="menu-icon" style="font-size:13px">📋</span> 이력 조회</a>
+    </li>
+    <li class="menu-group">
+      <a href="/locations"><span class="menu-icon">🗺</span> 로케이션 관리</a>
+      <a href="/location-inventory" class="menu-sub"><span class="menu-icon" style="font-size:13px">🔍</span> 재고조회</a>
+    </li>
+
+    <li class="nav-section">입출고</li>
+    <li><a href="/orders"><span class="menu-icon">📋</span> 주문 관리</a></li>
+    <li><a href="/inbound"><span class="menu-icon">📥</span> 입고 처리</a></li>
+    <li class="menu-group">
+      <a href="/outbound"><span class="menu-icon">📤</span> 출고 처리</a>
+      <a href="/pallets" class="menu-sub"><span class="menu-icon" style="font-size:13px">🗂</span> 팔레트 출고</a>
+    </li>
+  </ul>
+
+  <div class="sidebar-user">
+    <div class="user-info">
+      <div class="user-name" th:text="${user != null ? user.username : ''}"></div>
+      <div class="user-role">
+        <span th:text="${user != null and user.admin ? '관리자' : '일반'}"></span>
+        <span th:if="${user != null and user.companyName != null}" th:text="' · ' + ${user.companyName}"></span>
+      </div>
+    </div>
+    <form action="/api/auth/logout" method="post" style="margin:0">
+      <button class="logout-btn" type="submit" title="로그아웃">⏻</button>
+    </form>
+  </div>
+</nav>
+</body>
+</html>

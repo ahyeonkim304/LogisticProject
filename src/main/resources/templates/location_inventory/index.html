@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>로케이션별 재고 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header"><h1 class="page-title">로케이션별 재고 조회</h1></header>
+
+      <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">
+        <!-- 트리 패널 -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title" style="font-size:14px">로케이션 트리</h2>
+            <input id="tree-search" class="form-control" placeholder="검색..." style="margin-top:8px;font-size:12px">
+          </div>
+          <div class="card-body" style="padding:8px">
+            <div id="tree-root" style="font-size:13px"></div>
+          </div>
+        </div>
+
+        <!-- 상세 패널 -->
+        <div>
+          <div id="detail-empty" class="card">
+            <div class="card-body" style="text-align:center;padding:48px;color:var(--color-muted)">
+              왼쪽에서 로케이션을 선택하세요
+            </div>
+          </div>
+          <div id="detail-panel" style="display:none">
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-body">
+                <h3 id="detail-name" style="margin:0 0 4px;font-size:16px"></h3>
+                <div id="detail-meta" style="font-size:12px;color:var(--color-muted)"></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h2 class="card-title" style="font-size:14px">보관 중인 재고</h2></div>
+              <div class="card-body">
+                <table class="data-table">
+                  <thead><tr><th>SKU</th><th>상품명</th><th>수량</th><th>입고일</th></tr></thead>
+                  <tbody id="detail-body"><tr><td colspan="4" class="text-center text-muted">선택하세요</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+let treeData = [];
+
+async function loadTree() {
+  try {
+    treeData = await apiFetch('GET', '/location-inventory/tree') || [];
+    renderTree(treeData, document.getElementById('tree-root'));
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function renderTree(nodes, el) {
+  el.innerHTML = '';
+  if (!nodes || !nodes.length) {
+    el.innerHTML = '<div style="color:var(--color-muted);padding:8px">로케이션 없음</div>';
+    return;
+  }
+  nodes.forEach(node => {
+    const item = document.createElement('div');
+    item.style.cssText = 'margin-bottom:2px';
+    const hasChildren = node.children && node.children.length;
+    item.innerHTML = `
+      <div class="tree-node" data-id="${node.id}" onclick="selectNode(${node.id}, '${escHtml(node.code)}', '${escHtml(node.name||'')}', '${escHtml(node.locationType||'')}')">
+        <span style="color:var(--color-muted);margin-right:4px">${hasChildren ? '▾' : '·'}</span>
+        <span style="font-weight:500">${escHtml(node.code)}</span>
+        ${node.name ? `<span style="color:var(--color-muted);margin-left:4px;font-size:11px">${escHtml(node.name)}</span>` : ''}
+        ${node.totalQuantity > 0 ? `<span style="margin-left:4px;font-size:11px;color:var(--color-primary);font-weight:600">${node.totalQuantity}</span>` : ''}
+      </div>`;
+    if (hasChildren) {
+      const sub = document.createElement('div');
+      sub.style.paddingLeft = '16px';
+      renderTree(node.children, sub);
+      item.appendChild(sub);
+    }
+    el.appendChild(item);
+  });
+}
+
+async function selectNode(id, code, name, type) {
+  document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('active'));
+  const active = document.querySelector(`.tree-node[data-id="${id}"]`);
+  if (active) active.classList.add('active');
+
+  document.getElementById('detail-name').textContent = `${code}${name ? ' · ' + name : ''}`;
+  document.getElementById('detail-meta').textContent = `유형: ${type}`;
+  document.getElementById('detail-empty').style.display = 'none';
+  document.getElementById('detail-panel').style.display = 'block';
+  document.getElementById('detail-body').innerHTML = '<tr><td colspan="4" class="text-center text-muted">로딩 중...</td></tr>';
+  try {
+    const inv = await apiFetch('GET', `/location-inventory/${id}`);
+    const rows = inv.inventories ?? inv ?? [];
+    document.getElementById('detail-body').innerHTML = !rows.length
+      ? '<tr><td colspan="4" class="text-center text-muted">보관 중인 재고 없음</td></tr>'
+      : rows.map(r => `<tr>
+          <td><code>${escHtml(r.productSku)}</code></td>
+          <td>${escHtml(r.productName)}</td>
+          <td><strong>${r.quantity}</strong></td>
+          <td>${fmtDate(r.inboundAt || r.createdAt)}</td>
+        </tr>`).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+document.getElementById('tree-search').addEventListener('input', function() {
+  const kw = this.value.toLowerCase();
+  document.querySelectorAll('.tree-node').forEach(n => {
+    n.parentElement.style.display = (!kw || n.textContent.toLowerCase().includes(kw)) ? '' : 'none';
+  });
+});
+
+loadTree();
+</script>
+<style>
+.tree-node { padding:5px 8px; border-radius:4px; cursor:pointer; transition:background .15s; }
+.tree-node:hover { background:var(--color-bg-hover, #f3f4f6); }
+.tree-node.active { background:var(--color-primary-light, #dbeafe); color:var(--color-primary, #2563eb); }
+</style>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>출고 처리 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header"><h1 class="page-title">출고 처리</h1></header>
+
+      <div class="tab-bar" style="margin-bottom:16px">
+        <button class="tab-btn active" onclick="switchTab('ready',this)">출고 대기</button>
+        <button class="tab-btn" onclick="switchTab('pending',this)">처리 중</button>
+        <button class="tab-btn" onclick="switchTab('hold',this)">보류</button>
+        <button class="tab-btn" onclick="switchTab('completed',this)">완료</button>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <table class="data-table">
+            <thead>
+              <tr><th>출고번호</th><th>주문번호</th><th>SKU</th><th>상품명</th><th>수량</th><th>상태</th><th>일시</th><th>관리</th></tr>
+            </thead>
+            <tbody id="outbound-body"><tr><td colspan="8" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+          <div id="pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+let currentTab = 'ready', currentPage = 0;
+
+const BADGE = {
+  OUTBOUND_PENDING:'badge-orange', OUTBOUND_HOLD:'badge-yellow',
+  OUTBOUND_COMPLETED:'badge-teal', SHIPPED:'badge-gray'
+};
+
+async function load(page = 0) {
+  currentPage = page;
+  try {
+    const data = await apiFetch('GET', `/outbound/${currentTab}?page=${page}&size=20`);
+    const rows = data.content ?? [];
+    document.getElementById('outbound-body').innerHTML = !rows.length
+      ? '<tr><td colspan="8" class="text-center text-muted">데이터가 없습니다.</td></tr>'
+      : rows.map(r => `<tr>
+          <td><code>#${r.id}</code></td>
+          <td><code>${escHtml(r.orderNumber)}</code></td>
+          <td><code>${escHtml(r.productSku)}</code></td>
+          <td>${escHtml(r.productName)}</td>
+          <td>${r.quantity}</td>
+          <td><span class="badge ${BADGE[r.status]||''}">${STATUS_LABELS[r.status]||r.status}</span></td>
+          <td>${fmtDate(r.updatedAt||r.createdAt)}</td>
+          <td>${actionBtns(r)}</td>
+        </tr>`).join('');
+    renderPagination(document.getElementById('pagination'), data, load);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function actionBtns(r) {
+  if (currentTab === 'ready') return `<button class="btn btn-xs btn-primary" onclick="start(${r.id})">출고 시작</button>`;
+  if (currentTab === 'pending') return `
+    <button class="btn btn-xs btn-success" onclick="complete(${r.id})">출고 완료</button>
+    <button class="btn btn-xs btn-warning" onclick="hold(${r.id})">보류</button>`;
+  if (currentTab === 'hold') return `<button class="btn btn-xs btn-primary" onclick="resume(${r.id})">재개</button>`;
+  if (currentTab === 'completed') return `<button class="btn btn-xs btn-secondary" onclick="ship(${r.id})">출하</button>`;
+  return '<span class="text-muted">-</span>';
+}
+
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  load(0);
+}
+
+async function start(id) {
+  try { await apiFetch('POST', `/outbound/${id}/start`); showToast('출고 시작'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function complete(id) {
+  if (!confirm('출고를 완료 처리하시겠습니까?')) return;
+  try { await apiFetch('POST', `/outbound/${id}/complete`); showToast('출고 완료'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function hold(id) {
+  if (!confirm('출고를 보류하시겠습니까?')) return;
+  try { await apiFetch('POST', `/outbound/${id}/hold`); showToast('보류 처리'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function resume(id) {
+  try { await apiFetch('POST', `/outbound/${id}/resume`); showToast('재개되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function ship(id) {
+  if (!confirm('출하 처리하시겠습니까?')) return;
+  try { await apiFetch('POST', `/outbound/${id}/ship`); showToast('출하 완료'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+load();
+</script>
+</body>
+</html>

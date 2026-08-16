@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>주문 관리 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+  <style>
+    .order-item-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+    .order-item-row .item-info { min-width: 0; }
+    .order-item-row .item-sku  { font-size: 12px; font-weight: 600; color: var(--color-primary); font-family: monospace; }
+    .order-item-row .item-name { font-size: 12px; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .order-item-row .item-qty  { width: 72px; }
+    #item-list-empty { font-size: 13px; color: var(--color-muted); text-align: center; padding: 16px; border: 1px dashed var(--color-border); border-radius: 6px; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header">
+        <h1 class="page-title">주문 관리</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="document.getElementById('excel-input').click()">📥 엑셀 업로드</button>
+          <input id="excel-input" type="file" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this)">
+          <button class="btn btn-primary" onclick="openPanel('create')">+ 주문 등록</button>
+        </div>
+      </header>
+
+      <div class="tab-bar" style="margin-bottom:16px">
+        <button class="tab-btn active" onclick="setTab('',this)">전체</button>
+        <button class="tab-btn" onclick="setTab('ORDER_CREATED',this)">주문 생성</button>
+        <button class="tab-btn" onclick="setTab('ORDER_HOLD',this)">보류</button>
+        <button class="tab-btn" onclick="setTab('INBOUND_PENDING',this)">입고 대기</button>
+        <button class="tab-btn" onclick="setTab('INBOUND_COMPLETED',this)">입고 완료</button>
+        <button class="tab-btn" onclick="setTab('OUTBOUND_PENDING',this)">출고 대기</button>
+        <button class="tab-btn" onclick="setTab('OUTBOUND_COMPLETED',this)">출고 완료</button>
+        <button class="tab-btn" onclick="setTab('SHIPPED',this)">출하 완료</button>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+            <input id="filter-kw" class="form-control" placeholder="주문번호/SKU 검색" style="width:220px">
+            <button class="btn btn-secondary" onclick="load(0)">검색</button>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>주문번호</th><th>SKU</th><th>상품명</th><th>수량</th><th>상태</th><th>등록일</th><th>관리</th></tr></thead>
+            <tbody id="order-body"><tr><td colspan="7" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+          <div id="pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 드로어 배경 -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closePanel()"></div>
+
+<!-- 등록 / 수정 드로어 -->
+<div class="drawer" id="side-panel">
+  <div class="drawer-header">
+    <h3 id="panel-title">주문 등록</h3>
+    <button class="drawer-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="drawer-body">
+
+    <!-- ── 등록 모드: 다중 SKU 선택 ── -->
+    <div id="create-form">
+      <div class="form-group">
+        <label class="form-label">SKU 선택</label>
+        <div style="display:flex;gap:6px">
+          <select id="sku-select" class="form-control" style="flex:1">
+            <option value="">SKU를 선택하세요</option>
+          </select>
+          <input id="item-qty" class="form-control" type="number" min="1" value="1" style="width:72px" placeholder="수량">
+          <button class="btn btn-secondary" onclick="addItem()" style="white-space:nowrap">추가</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--color-muted);margin-bottom:6px">추가된 상품</div>
+        <div id="item-list">
+          <div id="item-list-empty">추가된 상품이 없습니다.</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">메모</label>
+        <textarea id="p-memo-create" class="form-control" rows="3" placeholder="공통 메모 (선택)"></textarea>
+      </div>
+    </div>
+
+    <!-- ── 수정 모드: 단일 SKU ── -->
+    <div id="edit-form" style="display:none">
+      <div class="form-group">
+        <label class="form-label">SKU</label>
+        <input id="p-sku-edit" class="form-control" disabled>
+      </div>
+      <div class="form-group">
+        <label class="form-label">수량 <span class="text-danger">*</span></label>
+        <input id="p-qty-edit" class="form-control" type="number" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">메모</label>
+        <textarea id="p-memo-edit" class="form-control" rows="3"></textarea>
+      </div>
+    </div>
+
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-secondary" onclick="closePanel()">취소</button>
+    <button class="btn btn-primary" onclick="submitPanel()">저장</button>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+const BADGE = {
+  ORDER_CREATED:'badge-blue', ORDER_HOLD:'badge-yellow',
+  INBOUND_PENDING:'badge-purple', INBOUND_COMPLETED:'badge-green',
+  OUTBOUND_PENDING:'badge-orange', OUTBOUND_COMPLETED:'badge-teal', SHIPPED:'badge-gray'
+};
+let currentPage = 0, currentStatus = '', editingId = null;
+let allProducts = [], orderItems = []; // { sku, productName, quantity }
+
+/* ── 상품 목록 초기 로드 ── */
+async function loadProducts() {
+  try {
+    const list = await apiFetch('GET', '/products/all');
+    allProducts = Array.isArray(list) ? list : (list.content ?? []);
+    const sel = document.getElementById('sku-select');
+    sel.innerHTML = '<option value="">SKU를 선택하세요</option>' +
+      allProducts.map(p => `<option value="${escHtml(p.sku)}">${escHtml(p.sku)} — ${escHtml(p.name)}</option>`).join('');
+  } catch (e) { /* 상품 로딩 실패 시 무시 */ }
+}
+
+/* ── 탭 ── */
+function setTab(status, el) {
+  currentStatus = status;
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  load(0);
+}
+
+/* ── 드로어 열기/닫기 ── */
+function openPanel(mode, r) {
+  editingId = mode === 'edit' ? r.id : null;
+  document.getElementById('panel-title').textContent = mode === 'edit' ? '주문 수정' : '주문 등록';
+  document.getElementById('create-form').style.display = mode === 'create' ? '' : 'none';
+  document.getElementById('edit-form').style.display   = mode === 'edit'   ? '' : 'none';
+
+  if (mode === 'edit') {
+    document.getElementById('p-sku-edit').value  = r.productSku || '';
+    document.getElementById('p-qty-edit').value  = r.quantity || '';
+    document.getElementById('p-memo-edit').value = r.memo || '';
+  } else {
+    orderItems = [];
+    document.getElementById('item-qty').value = 1;
+    document.getElementById('sku-select').selectedIndex = 0;
+    document.getElementById('p-memo-create').value = '';
+    renderItems();
+  }
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('open');
+  editingId = null;
+}
+
+/* ── 다중 SKU 관리 ── */
+function addItem() {
+  const sku = document.getElementById('sku-select').value;
+  const qty = parseInt(document.getElementById('item-qty').value);
+  if (!sku) { showToast('SKU를 선택하세요.', 'error'); return; }
+  if (!qty || qty < 1) { showToast('수량을 1 이상 입력하세요.', 'error'); return; }
+  if (orderItems.find(i => i.sku === sku)) { showToast('이미 추가된 SKU입니다.', 'error'); return; }
+  const product = allProducts.find(p => p.sku === sku);
+  orderItems.push({ sku, productId: product ? product.id : null, productName: product ? product.name : sku, quantity: qty });
+  document.getElementById('sku-select').selectedIndex = 0;
+  document.getElementById('item-qty').value = 1;
+  renderItems();
+}
+
+function updateQty(sku, qty) {
+  const item = orderItems.find(i => i.sku === sku);
+  if (item) item.quantity = parseInt(qty) || 1;
+}
+
+function removeItem(sku) {
+  orderItems = orderItems.filter(i => i.sku !== sku);
+  renderItems();
+}
+
+function renderItems() {
+  const list = document.getElementById('item-list');
+  if (!orderItems.length) {
+    list.innerHTML = '<div id="item-list-empty">추가된 상품이 없습니다.</div>';
+    return;
+  }
+  list.innerHTML = orderItems.map(item => `
+    <div class="order-item-row">
+      <div class="item-info">
+        <div class="item-sku">${escHtml(item.sku)}</div>
+        <div class="item-name">${escHtml(item.productName)}</div>
+      </div>
+      <input class="form-control item-qty" type="number" min="1" value="${item.quantity}"
+        onchange="updateQty('${escHtml(item.sku)}', this.value)">
+      <button class="btn btn-xs btn-danger" onclick="removeItem('${escHtml(item.sku)}')">✕</button>
+    </div>`).join('');
+}
+
+/* ── 저장 ── */
+async function submitPanel() {
+  if (editingId) {
+    const qty = parseInt(document.getElementById('p-qty-edit').value);
+    if (!qty || qty < 1) { showToast('수량은 1 이상이어야 합니다.', 'error'); return; }
+    const body = {
+      productSku: document.getElementById('p-sku-edit').value,
+      quantity:   qty,
+      memo:       document.getElementById('p-memo-edit').value.trim()
+    };
+    try {
+      await apiFetch('PUT', `/orders/${editingId}`, body);
+      showToast('수정되었습니다.');
+      closePanel(); load(currentPage);
+    } catch (e) { showToast(e.message, 'error'); }
+  } else {
+    if (!orderItems.length) { showToast('상품을 1개 이상 추가하세요.', 'error'); return; }
+    const body = {
+      items: orderItems.map(i => ({ productId: i.productId, quantity: i.quantity }))
+    };
+    try {
+      await apiFetch('POST', '/orders', body);
+      showToast(`주문이 등록되었습니다. (${orderItems.length}개 상품)`);
+      closePanel(); load(0);
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+}
+
+/* ── 목록 로드 ── */
+async function load(page = 0) {
+  currentPage = page;
+  const kw = document.getElementById('filter-kw').value.trim();
+  const params = `page=${page}&size=20${currentStatus ? '&status='+currentStatus : ''}${kw ? '&keyword='+encodeURIComponent(kw) : ''}`;
+  try {
+    const data = await apiFetch('GET', `/orders?${params}`);
+    const rows = data.content ?? [];
+    document.getElementById('order-body').innerHTML = !rows.length
+      ? '<tr><td colspan="7" class="text-center text-muted">주문이 없습니다.</td></tr>'
+      : rows.map(r => `<tr>
+          <td><code>${escHtml(r.orderNumber)}</code></td>
+          <td><code>${escHtml(r.productSku)}</code></td>
+          <td>${escHtml(r.productName)}</td>
+          <td>${r.quantity}</td>
+          <td><span class="badge ${BADGE[r.status]||''}">${STATUS_LABELS[r.status]||r.status}</span></td>
+          <td>${fmtDate(r.createdAt)}</td>
+          <td>${actionBtns(r)}</td>
+        </tr>`).join('');
+    renderPagination(document.getElementById('pagination'), data, load);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function actionBtns(r) {
+  const btns = [];
+  if (r.status === 'ORDER_CREATED') {
+    btns.push(`<button class="btn btn-xs btn-secondary" onclick='openPanel("edit",${JSON.stringify(r)})'>수정</button>`);
+    btns.push(`<button class="btn btn-xs btn-warning" onclick="hold(${r.id})">보류</button>`);
+    btns.push(`<button class="btn btn-xs btn-danger" onclick="del(${r.id})">삭제</button>`);
+  }
+  if (r.status === 'ORDER_HOLD')
+    btns.push(`<button class="btn btn-xs btn-primary" onclick="resume(${r.id})">재개</button>`);
+  return btns.join(' ') || '<span class="text-muted">-</span>';
+}
+
+async function hold(id) {
+  if (!confirm('이 주문을 보류 처리하시겠습니까?')) return;
+  try { await apiFetch('POST', `/orders/${id}/hold`); showToast('보류 처리되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function resume(id) {
+  try { await apiFetch('POST', `/orders/${id}/resume`); showToast('재개되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function del(id) {
+  if (!confirm('이 주문을 삭제하시겠습니까?')) return;
+  try { await apiFetch('DELETE', `/orders/${id}`); showToast('삭제되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+async function uploadExcel(input) {
+  const file = input.files[0]; if (!file) return;
+  const form = new FormData(); form.append('file', file); input.value = '';
+  try {
+    const res = await fetch('/api/orders/bulk', { method:'POST', credentials:'same-origin', body:form });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.message || '업로드 실패');
+    showToast(d.message || '업로드 완료'); load(0);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+/* Enter 키도 추가 버튼처럼 동작 */
+document.getElementById('item-qty').addEventListener('keydown', e => { if (e.key === 'Enter') addItem(); });
+document.getElementById('filter-kw').addEventListener('keydown', e => { if (e.key === 'Enter') load(0); });
+
+loadProducts();
+load();
+</script>
+</body>
+</html>

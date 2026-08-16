@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>입고 처리 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header"><h1 class="page-title">입고 처리</h1></header>
+
+      <div class="tab-bar" style="margin-bottom:16px">
+        <button class="tab-btn active" onclick="switchTab('pending',this)">대기</button>
+        <button class="tab-btn" onclick="switchTab('hold',this)">보류</button>
+        <button class="tab-btn" onclick="switchTab('completed',this)">완료</button>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <table class="data-table">
+            <thead>
+              <tr><th>입고번호</th><th>주문번호</th><th>SKU</th><th>상품명</th><th>수량</th><th>팔레트</th><th>상태</th><th>일시</th><th>관리</th></tr>
+            </thead>
+            <tbody id="inbound-body"><tr><td colspan="9" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+          <div id="pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 드로어 배경 -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closePanel()"></div>
+
+<!-- 바코드 스캔 드로어 -->
+<div class="drawer" id="side-panel">
+  <div class="drawer-header">
+    <h3>입고 스캔</h3>
+    <button class="drawer-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <p style="font-size:13px;color:var(--color-muted);margin-bottom:16px">입고 ID: <strong id="scan-inbound-id"></strong></p>
+    <div class="form-group">
+      <label class="form-label">바코드</label>
+      <input id="f-barcode" class="form-control" placeholder="바코드 스캔 또는 입력">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="form-group">
+        <label class="form-label">가로(cm)</label>
+        <input id="f-width" class="form-control" type="number" min="0" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">세로(cm)</label>
+        <input id="f-depth" class="form-control" type="number" min="0" step="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">높이(cm)</label>
+        <input id="f-height" class="form-control" type="number" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">무게(kg)</label>
+      <input id="f-weight" class="form-control" type="number" min="0" step="0.01">
+    </div>
+    <div class="form-group">
+      <label class="form-label">팔레트 ID</label>
+      <input id="f-pallet" class="form-control" placeholder="선택사항">
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-secondary" onclick="closePanel()">취소</button>
+    <button class="btn btn-primary" onclick="doScan()">스캔 확인</button>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+let currentTab = 'pending', currentPage = 0;
+
+async function load(page = 0) {
+  currentPage = page;
+  try {
+    const data = await apiFetch('GET', `/inbound/${currentTab}?page=${page}&size=20`);
+    const rows = data.content ?? [];
+    document.getElementById('inbound-body').innerHTML = !rows.length
+      ? '<tr><td colspan="9" class="text-center text-muted">데이터가 없습니다.</td></tr>'
+      : rows.map(r => `<tr>
+          <td><code>#${r.id}</code></td>
+          <td><code>${escHtml(r.orderNumber)}</code></td>
+          <td><code>${escHtml(r.productSku)}</code></td>
+          <td>${escHtml(r.productName)}</td>
+          <td>${r.quantity}</td>
+          <td>${r.palletId ? '#'+r.palletId : '<span class="text-muted">-</span>'}</td>
+          <td><span class="badge ${statusBadge(r.status)}">${STATUS_LABELS[r.status] || r.status}</span></td>
+          <td>${fmtDate(r.updatedAt || r.createdAt)}</td>
+          <td>${actionBtns(r)}</td>
+        </tr>`).join('');
+    renderPagination(document.getElementById('pagination'), data, load);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function statusBadge(s) {
+  return { INBOUND_PENDING:'badge-purple', INBOUND_HOLD:'badge-yellow', INBOUND_COMPLETED:'badge-green' }[s] || '';
+}
+
+function actionBtns(r) {
+  if (currentTab === 'pending') return `
+    <button class="btn btn-xs btn-primary" onclick="openPanel(${r.id})">스캔</button>
+    <button class="btn btn-xs btn-success" onclick="complete(${r.id})">완료</button>
+    <button class="btn btn-xs btn-warning" onclick="hold(${r.id})">보류</button>`;
+  if (currentTab === 'hold') return `
+    <button class="btn btn-xs btn-primary" onclick="resume(${r.id})">재개</button>`;
+  return '<span class="text-muted">-</span>';
+}
+
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  closePanel();
+  load(0);
+}
+
+function openPanel(id) {
+  document.getElementById('scan-inbound-id').textContent = id;
+  ['barcode','width','depth','height','weight','pallet'].forEach(f => document.getElementById('f-'+f).value = '');
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('open');
+}
+
+async function doScan() {
+  const id = document.getElementById('scan-inbound-id').textContent;
+  const body = {
+    barcode:  document.getElementById('f-barcode').value.trim(),
+    width:    parseFloat(document.getElementById('f-width').value)  || null,
+    depth:    parseFloat(document.getElementById('f-depth').value)  || null,
+    height:   parseFloat(document.getElementById('f-height').value) || null,
+    weight:   parseFloat(document.getElementById('f-weight').value) || null,
+    palletId: document.getElementById('f-pallet').value ? parseInt(document.getElementById('f-pallet').value) : null
+  };
+  try {
+    await apiFetch('POST', `/inbound/${id}/scan`, body);
+    showToast('스캔이 완료되었습니다.');
+    closePanel(); load(currentPage);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function complete(id) {
+  if (!confirm('입고를 완료 처리하시겠습니까?')) return;
+  try { await apiFetch('POST', `/inbound/${id}/complete`); showToast('입고 완료'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+async function hold(id) {
+  if (!confirm('입고를 보류하시겠습니까?')) return;
+  try { await apiFetch('POST', `/inbound/${id}/hold`); showToast('보류 처리'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+async function resume(id) {
+  try { await apiFetch('POST', `/inbound/${id}/resume`); showToast('재개되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>회원가입 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span style="font-size:32px">📦</span>
+      <h1>WMS 회원가입</h1>
+    </div>
+    <div id="msg" style="display:none"></div>
+    <form id="register-form">
+      <div class="form-group">
+        <label class="form-label">아이디</label>
+        <input id="username" class="form-control" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">비밀번호</label>
+        <input id="password" class="form-control" type="password" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">회사명</label>
+        <input id="companyName" class="form-control">
+      </div>
+      <button id="submit-btn" class="btn btn-primary" style="width:100%" type="submit">회원가입</button>
+    </form>
+    <p style="text-align:center;margin-top:16px;font-size:13px">
+      이미 계정이 있으신가요? <a href="/login">로그인</a>
+    </p>
+  </div>
+</div>
+<script>
+  document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const msgEl = document.getElementById('msg');
+    btn.disabled = true; btn.textContent = '처리 중...';
+    msgEl.style.display = 'none';
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value,
+          companyName: document.getElementById('companyName').value
+        })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.message || '회원가입에 실패했습니다.');
+      msgEl.className = 'alert alert-success';
+      msgEl.textContent = d.message || '가입 완료! 관리자 승인 후 로그인 가능합니다.';
+      msgEl.style.display = 'block';
+      setTimeout(() => window.location.href = '/login', 2000);
+    } catch (err) {
+      msgEl.className = 'alert alert-error'; msgEl.textContent = err.message;
+      msgEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = '회원가입';
+    }
+  });
+</script>
+</body>
+</html>

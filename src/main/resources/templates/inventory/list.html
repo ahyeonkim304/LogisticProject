@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('재고 관리')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">재고 관리</h1>
+            <div style="display:flex; gap:8px;">
+                <button type="button" id="bulkInboundBtn" class="btn btn-primary"
+                        disabled onclick="openBulkModal()">
+                    📦 선택 입고 (<span id="selectedCount">0</span>건)
+                </button>
+            </div>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <!-- 좌우 분할: 필터+테이블+페이징(좌) | 입고 패널(우) -->
+            <div style="display:flex; align-items:stretch; gap:16px;">
+                <!-- 좌: 필터 + 테이블 + 페이지네이션 -->
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:12px;">
+
+                    <!-- 검색 / 필터 -->
+                    <div class="filter-bar" style="margin-bottom:0;">
+                        <form class="filter-form" th:action="@{/inventory}" method="get"
+                              style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <input type="text" name="keyword" class="form-input search-input"
+                                   th:value="${keyword}" placeholder="SKU 또는 상품명 검색"/>
+                            <select th:if="${accounts != null}" name="filterAccountId" class="form-select"
+                                    style="min-width:160px;">
+                                <option value="">전체 고객사</option>
+                                <option th:each="acc : ${accounts}"
+                                        th:value="${acc.id}"
+                                        th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName) ? acc.companyName : acc.username}"
+                                        th:selected="${filterAccountId != null and filterAccountId == acc.id}">
+                                </option>
+                            </select>
+                            <button type="submit" class="btn btn-secondary">검색</button>
+                            <a th:href="@{/inventory}" class="btn btn-outline">초기화</a>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">상품별 재고 현황</h2>
+                            <span class="card-hint" th:if="${products.totalElements > 0}"
+                                  th:text="'총 ' + ${products.totalElements} + '건'" style="font-size:12px; color:var(--color-muted);"></span>
+                        </div>
+                        <div class="card-body" style="padding:0; overflow-x:auto;">
+                            <table class="data-table" style="table-layout:fixed; min-width:680px;">
+                                <colgroup>
+                                    <col style="width:38px;"/>
+                                    <th:block th:if="${accounts != null}"><col style="width:130px;"/></th:block>
+                                    <col style="width:110px;"/>
+                                    <col/><!-- 상품명: 가변 -->
+                                    <col style="width:88px;"/>
+                                    <col style="width:80px;"/>
+                                    <col style="width:70px;"/>
+                                    <col style="width:120px;"/>
+                                </colgroup>
+                                <thead>
+                                <tr>
+                                    <th style="padding:8px;">
+                                        <input type="checkbox" id="checkAll" title="전체 선택"
+                                               onchange="toggleAll(this)"/>
+                                    </th>
+                                    <th th:if="${accounts != null}">고객사</th>
+                                    <th>SKU</th>
+                                    <th>상품명</th>
+                                    <th style="text-align:right;">현재 재고</th>
+                                    <th style="text-align:right;">안전 재고</th>
+                                    <th>상태</th>
+                                    <th>처리</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr th:if="${products.isEmpty()}">
+                                    <td th:attr="colspan=${accounts != null ? 8 : 7}"
+                                        class="text-center text-muted">등록된 상품이 없습니다.</td>
+                                </tr>
+                                <tr th:each="p : ${products}"
+                                    th:id="'row-' + ${p.id}"
+                                    th:classappend="${p.currentStock <= p.safetyStock ? ' inv-row-warning' : ''}">
+                                    <td style="padding:8px; text-align:center;">
+                                        <input type="checkbox" class="row-check"
+                                               th:value="${p.id}"
+                                               th:attr="data-sku=${p.sku},
+                                                        data-name=${p.name},
+                                                        data-account-id=${p.accountId}"
+                                               onchange="updateSelection()"/>
+                                    </td>
+                                    <td th:if="${accounts != null}"
+                                        style="font-size:12px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                        th:text="${p.accountName != null ? p.accountName : '—'}">-</td>
+                                    <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        <code th:text="${p.sku}">-</code>
+                                    </td>
+                                    <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                        th:text="${p.name}">-</td>
+                                    <td style="text-align:right; font-weight:700;"
+                                        th:classappend="${p.currentStock <= 0 ? ' text-danger' : (p.currentStock <= p.safetyStock ? ' text-warning' : ' text-success')}"
+                                        th:text="${p.currentStock}">0</td>
+                                    <td style="text-align:right; color:var(--color-muted);"
+                                        th:text="${p.safetyStock}">0</td>
+                                    <td>
+                                        <span th:if="${p.currentStock <= 0}" class="badge badge-danger-soft">재고 없음</span>
+                                        <span th:if="${p.currentStock > 0 and p.currentStock <= p.safetyStock}" class="badge badge-warning-soft">부족</span>
+                                        <span th:if="${p.currentStock > p.safetyStock}" class="badge badge-inbound-done">정상</span>
+                                    </td>
+                                    <td class="action-col">
+                                        <button type="button" class="btn btn-sm btn-primary"
+                                                onclick="openPanel('inbound', this)"
+                                                th:data-id="${p.id}"
+                                                th:data-sku="${p.sku}"
+                                                th:data-name="${p.name}"
+                                                th:data-stock="${p.currentStock}"
+                                                th:attr="data-account-id=${p.accountId}">입고</button>
+                                        <button type="button" class="btn btn-sm btn-outline"
+                                                onclick="openPanel('adjust', this)"
+                                                th:data-id="${p.id}"
+                                                th:data-sku="${p.sku}"
+                                                th:data-name="${p.name}"
+                                                th:data-stock="${p.currentStock}"
+                                                th:attr="data-account-id=${p.accountId}">조정</button>
+                                    </td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- 페이지네이션 (filterAccountId 포함 — fragment 미지원 파라미터 직접 구성) -->
+                    <div class="pagination-wrap" th:if="${products.totalPages > 1}">
+                        <div class="page-info"
+                             th:text="'전체 ' + ${products.totalElements} + '건 / '
+                                      + (${products.number} + 1) + ' 페이지 / 총 '
+                                      + ${products.totalPages} + ' 페이지'"></div>
+                        <div class="page-buttons">
+                            <a th:if="${!products.first}"
+                               th:href="@{/inventory(page=${products.number - 1}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                               class="page-btn">&laquo; 이전</a>
+                            <th:block th:each="i : ${#numbers.sequence(0, products.totalPages - 1)}">
+                                <a th:href="@{/inventory(page=${i}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                                   th:text="${i + 1}"
+                                   th:classappend="${i == products.number ? ' active' : ''}"
+                                   class="page-btn"></a>
+                            </th:block>
+                            <a th:if="${!products.last}"
+                               th:href="@{/inventory(page=${products.number + 1}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                               class="page-btn">다음 &raquo;</a>
+                        </div>
+                    </div>
+
+                </div><!-- /left-col -->
+
+                <!-- 우: 입고/조정 패널 (항상 표시, 바코드 스캔 + 수기 입력) -->
+                <div class="inv-panel" id="invPanel"
+                     style="width:380px; flex-shrink:0; display:flex; flex-direction:column;">
+                    <div style="border:1px solid var(--color-border); border-radius:var(--radius,8px);
+                                background:var(--color-surface,#fff); flex:1; display:flex;
+                                flex-direction:column; overflow:hidden;">
+
+                        <!-- 헤더 + 모드 탭 -->
+                        <div style="padding:12px 16px 10px; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+                            <div style="font-size:14px; font-weight:700; margin-bottom:10px;">재고 입고 / 조정</div>
+                            <div style="display:flex; border:1px solid var(--color-border); border-radius:6px; overflow:hidden;">
+                                <button type="button" id="tabScan" onclick="switchMode('scan')"
+                                        style="flex:1; padding:7px 0; border:none; font-size:12px; cursor:pointer;
+                                               background:var(--color-primary,#3b82f6); color:#fff;">
+                                    📷 바코드 스캔
+                                </button>
+                                <button type="button" id="tabManual" onclick="switchMode('manual')"
+                                        style="flex:1; padding:7px 0; border:none; font-size:12px; cursor:pointer;
+                                               background:transparent; color:var(--color-text); border-left:1px solid var(--color-border);">
+                                    ✏️ 수기 입력
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- [스캔 모드] 바코드 입력 -->
+                        <div id="scanArea" style="padding:10px 16px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+                            <label style="font-size:11px; color:var(--color-muted); display:block; margin-bottom:5px;">SKU / 바코드</label>
+                            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                                <input type="text" id="barcodeInput" class="form-input"
+                                       placeholder="스캔 또는 입력 후 Enter"
+                                       style="flex:1;"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();lookupBySku();}"/>
+                                <button type="button" class="btn btn-secondary"
+                                        onclick="lookupBySku()"
+                                        style="padding:0 12px; white-space:nowrap; font-size:12px;">조회</button>
+                            </div>
+                            <!-- 처리 유형 선택 (스캔 모드) -->
+                            <div style="display:flex; gap:16px;">
+                                <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+                                    <input type="radio" name="scanType" value="inbound" checked/> 입고
+                                </label>
+                                <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+                                    <input type="radio" name="scanType" value="adjust"/> 재고 조정
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- [수기 모드] 안내 (상품 미선택 시) -->
+                        <div id="manualGuide"
+                             style="display:none; flex-direction:column; align-items:center; justify-content:center;
+                                    padding:40px 20px; text-align:center; gap:12px; color:var(--color-muted); flex:1;">
+                            <div style="font-size:36px; opacity:.4;">📋</div>
+                            <p style="font-size:13px; line-height:1.7; margin:0;">
+                                좌측 목록에서 <strong>입고</strong> 또는<br/><strong>조정</strong> 버튼을 클릭하세요.
+                            </p>
+                        </div>
+
+                        <!-- [스캔 모드] 초기 안내 -->
+                        <div id="scanGuide"
+                             style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+                                    padding:40px 20px; text-align:center; gap:12px; color:var(--color-muted); flex:1;">
+                            <div style="font-size:36px; opacity:.4;">📦</div>
+                            <p style="font-size:13px; line-height:1.7; margin:0;">
+                                바코드를 스캔하거나<br/>SKU를 입력하여 조회하세요.
+                            </p>
+                        </div>
+
+                        <!-- 상품 정보 + 폼 (공통 — 상품 선택 후 표시) -->
+                        <div id="productFormArea"
+                             style="display:none; flex-direction:column; overflow:hidden; flex:1;">
+
+                            <!-- 상품 정보 -->
+                            <div style="padding:10px 16px; border-bottom:1px solid var(--color-border);
+                                        flex-shrink:0; background:#f8fafc;">
+                                <div style="display:grid; grid-template-columns:64px 1fr; row-gap:4px; font-size:12px;">
+                                    <span style="color:var(--color-muted);">SKU</span>
+                                    <span id="panelSku" style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">-</span>
+                                    <span style="color:var(--color-muted);">상품명</span>
+                                    <span id="panelName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">-</span>
+                                    <span style="color:var(--color-muted);">현재 재고</span>
+                                    <span id="panelStock" style="font-weight:700;">0</span>
+                                </div>
+                                <!-- 다른 상품으로 재설정 -->
+                                <button type="button" onclick="resetPanel()"
+                                        style="margin-top:8px; font-size:11px; color:var(--color-muted);
+                                               background:none; border:none; padding:0; cursor:pointer; text-decoration:underline;">
+                                    ← 다른 상품 선택
+                                </button>
+                            </div>
+
+                            <!-- 폼 영역 -->
+                            <div style="padding:12px 16px; flex:1; overflow-y:auto;">
+                                <!-- 입고 폼 -->
+                                <form id="inboundForm" method="post" style="display:none;">
+                                    <div class="form-group" style="margin-bottom:10px;">
+                                        <label class="form-label" style="font-size:12px;">로케이션 <span class="required">*</span></label>
+                                        <select name="locationId" id="inboundLocationSelect" class="form-select" required>
+                                            <option value="">-- 로케이션 선택 --</option>
+                                            <option th:each="loc : ${binLocations}"
+                                                    th:value="${loc.id}"
+                                                    th:attr="data-account-id=${loc.account != null ? loc.account.id : ''}"
+                                                    th:text="${loc.code + (loc.name != null and !#strings.isEmpty(loc.name) ? ' — ' + loc.name : '')}">-</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:10px;">
+                                        <label class="form-label" style="font-size:12px;">입고 수량 <span class="required">*</span></label>
+                                        <input type="number" name="quantity" id="inboundQtyInput"
+                                               class="form-input" min="1" required placeholder="입고할 수량"/>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:12px;">
+                                        <label class="form-label" style="font-size:12px;">메모</label>
+                                        <input type="text" name="memo" class="form-input" placeholder="입고 사유 (선택)"/>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary" style="width:100%;">재고 입고 처리</button>
+                                </form>
+
+                                <!-- 조정 폼 -->
+                                <form id="adjustForm" method="post" style="display:none;">
+                                    <div class="form-group" style="margin-bottom:10px;">
+                                        <label class="form-label" style="font-size:12px;">로케이션 <span class="required">*</span></label>
+                                        <select name="locationId" id="adjustLocationSelect" class="form-select" required>
+                                            <option value="">-- 로케이션 선택 --</option>
+                                            <option th:each="loc : ${binLocations}"
+                                                    th:value="${loc.id}"
+                                                    th:attr="data-account-id=${loc.account != null ? loc.account.id : ''}"
+                                                    th:text="${loc.code + (loc.name != null and !#strings.isEmpty(loc.name) ? ' — ' + loc.name : '')}">-</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:10px;">
+                                        <label class="form-label" style="font-size:12px;">조정 수량 <span class="required">*</span></label>
+                                        <input type="number" name="quantity" class="form-input" required placeholder="양수(+증가) / 음수(-감소)"/>
+                                        <p class="text-muted" style="font-size:11px; margin-top:3px;">예) 10 → 10개 증가, -5 → 5개 감소</p>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:12px;">
+                                        <label class="form-label" style="font-size:12px;">메모</label>
+                                        <input type="text" name="memo" class="form-input" placeholder="조정 사유 (선택)"/>
+                                    </div>
+                                    <button type="submit" class="btn btn-secondary" style="width:100%;">재고 조정 처리</button>
+                                </form>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+    
+        </div><!-- /content-body -->
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     일괄 입고 모달
+     ══════════════════════════════════════════════════════════════ -->
+<div id="bulkModalOverlay" class="modal-overlay" style="display:none;" onclick="closeBulkModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <span class="modal-title">📦 선택 상품 일괄 입고</span>
+            <button type="button" class="modal-close" onclick="closeBulkModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <form id="bulkForm" method="post" th:action="@{/inventory/bulk-inbound}" onsubmit="return validateBulkForm()">
+                <div style="overflow-x:auto;">
+                    <table class="data-table" style="table-layout:fixed; min-width:580px;">
+                        <colgroup>
+                            <col style="width:110px;"/>
+                            <col/>
+                            <col style="width:185px;"/>
+                            <col style="width:90px;"/>
+                            <col style="width:120px;"/>
+                        </colgroup>
+                        <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>상품명</th>
+                            <th>로케이션 <span class="required">*</span></th>
+                            <th>수량 <span class="required">*</span></th>
+                            <th>메모</th>
+                        </tr>
+                        </thead>
+                        <tbody id="bulkTableBody">
+                        <!-- JS로 동적 생성 -->
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeBulkModal()">취소</button>
+            <button type="submit" form="bulkForm" class="btn btn-primary">입고 처리</button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* ── 모달 ── */
+.modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:400; display:flex; align-items:center; justify-content:center; padding:20px; }
+.modal-box { background:#fff; border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,.25); width:100%; max-width:780px; max-height:85vh; display:flex; flex-direction:column; }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--color-border); flex-shrink:0; }
+.modal-title { font-size:15px; font-weight:700; }
+.modal-close { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:5px; font-size:14px; color:var(--color-muted); }
+.modal-close:hover { background:var(--color-hover); color:var(--color-text); }
+.modal-body { flex:1; overflow-y:auto; padding:16px 20px; }
+.modal-footer { display:flex; justify-content:flex-end; gap:8px; padding:14px 20px; border-top:1px solid var(--color-border); flex-shrink:0; }
+/* ── 테이블 인라인 인풋 ── */
+.tbl-input { width:100%; height:28px; padding:0 6px; border:1px solid var(--color-border); border-radius:4px; font-size:12px; }
+.tbl-input:focus { border-color:var(--color-primary); outline:none; }
+.tbl-select { width:100%; height:28px; padding:0 4px; border:1px solid var(--color-border); border-radius:4px; font-size:12px; background:#fff; }
+</style>
+
+<script>
+// ── 모드 전환 (바코드 스캔 / 수기 입력) ──
+let _mode = 'scan';
+function switchMode(mode) {
+    _mode = mode;
+    const isScan = mode === 'scan';
+    // 탭 스타일
+    const tS = document.getElementById('tabScan'), tM = document.getElementById('tabManual');
+    tS.style.background = isScan ? 'var(--color-primary,#3b82f6)' : 'transparent';
+    tS.style.color      = isScan ? '#fff' : 'var(--color-text)';
+    tM.style.background = !isScan ? 'var(--color-primary,#3b82f6)' : 'transparent';
+    tM.style.color      = !isScan ? '#fff' : 'var(--color-text)';
+    // 영역 토글
+    document.getElementById('scanArea').style.display = isScan ? '' : 'none';
+    // 폼이 열려 있으면 그대로 유지
+    if (document.getElementById('productFormArea').style.display !== 'none') return;
+    document.getElementById('scanGuide').style.display   = isScan  ? 'flex' : 'none';
+    document.getElementById('manualGuide').style.display = !isScan ? 'flex' : 'none';
+    if (isScan) setTimeout(() => document.getElementById('barcodeInput').focus(), 30);
+}
+
+// ── 바코드/SKU 조회 ──
+function lookupBySku() {
+    const val = document.getElementById('barcodeInput').value.trim();
+    if (!val) return;
+    // 렌더링된 테이블 행에서 SKU 검색
+    let found = null;
+    document.querySelectorAll('tbody tr[id^="row-"]').forEach(row => {
+        const code = row.querySelector('td code');
+        if (code && code.textContent.trim().toUpperCase() === val.toUpperCase()) found = row;
+    });
+    if (!found) {
+        alert(`'${val}' SKU를 찾을 수 없습니다.`);
+        document.getElementById('barcodeInput').select();
+        return;
+    }
+    const type = document.querySelector('input[name="scanType"]:checked').value;
+    // 행의 입고(btn-primary) 또는 조정(btn-outline) 버튼에서 data 추출
+    const btn = type === 'inbound'
+        ? found.querySelector('button.btn-primary')
+        : found.querySelector('button.btn-outline');
+    if (btn) {
+        openPanel(type, btn);
+        document.getElementById('barcodeInput').value = '';
+        document.getElementById('barcodeInput').focus();
+    }
+}
+
+// ── 패널 상품 정보 채우기 + 폼 활성화 ──
+function openPanel(mode, btn) {
+    const id = btn.dataset.id, sku = btn.dataset.sku,
+          name = btn.dataset.name, stock = btn.dataset.stock,
+          accountId = btn.dataset.accountId;
+
+    document.getElementById('panelSku').textContent   = sku;
+    document.getElementById('panelName').textContent  = name;
+    document.getElementById('panelStock').textContent = stock + ' 개';
+
+    // 가이드 숨기고 폼 영역 표시
+    document.getElementById('scanGuide').style.display    = 'none';
+    document.getElementById('manualGuide').style.display  = 'none';
+    document.getElementById('productFormArea').style.display = 'flex';
+
+    const iForm = document.getElementById('inboundForm');
+    const aForm = document.getElementById('adjustForm');
+    if (mode === 'inbound') {
+        iForm.action = '/inventory/' + id + '/inbound';
+        iForm.style.display = 'block';
+        aForm.style.display = 'none';
+        filterLocations('inboundLocationSelect', accountId);
+        setTimeout(() => document.getElementById('inboundQtyInput').focus(), 30);
+    } else {
+        aForm.action = '/inventory/' + id + '/adjust';
+        aForm.style.display = 'block';
+        iForm.style.display = 'none';
+        filterLocations('adjustLocationSelect', accountId);
+    }
+}
+
+// ── 로케이션 필터 (고객사 다른 옵션 숨김) ──
+function filterLocations(selectId, accountId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.value = '';
+    sel.querySelectorAll('option[data-account-id]').forEach(opt => {
+        opt.style.display = (!accountId || !opt.dataset.accountId
+            || String(opt.dataset.accountId) === String(accountId)) ? '' : 'none';
+    });
+}
+
+// ── 패널 초기화 (다른 상품 선택) ──
+function resetPanel() {
+    document.getElementById('inboundForm').style.display    = 'none';
+    document.getElementById('adjustForm').style.display     = 'none';
+    document.getElementById('productFormArea').style.display = 'none';
+    if (_mode === 'scan') {
+        document.getElementById('scanGuide').style.display   = 'flex';
+        document.getElementById('barcodeInput').focus();
+    } else {
+        document.getElementById('manualGuide').style.display = 'flex';
+    }
+}
+
+// ── 체크박스 선택 ──
+function updateSelection() {
+    const checks = document.querySelectorAll('.row-check:checked');
+    const count  = checks.length;
+    document.getElementById('selectedCount').textContent = count;
+    document.getElementById('bulkInboundBtn').disabled   = count === 0;
+    const all = document.querySelectorAll('.row-check');
+    document.getElementById('checkAll').indeterminate = count > 0 && count < all.length;
+    document.getElementById('checkAll').checked       = count > 0 && count === all.length;
+}
+function toggleAll(cb) {
+    document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked);
+    updateSelection();
+}
+
+// ── 일괄 입고 모달 ──
+function openBulkModal() {
+    const checks = document.querySelectorAll('.row-check:checked');
+    if (!checks.length) return;
+    const tbody = document.getElementById('bulkTableBody');
+    tbody.innerHTML = '';
+    // Location 순환참조 방지: Thymeleaf 렌더링된 select를 cloneNode로 복제
+    const tplSelect = document.getElementById('inboundLocationSelect');
+    checks.forEach(cb => {
+        const pid = cb.value, sku = cb.dataset.sku,
+              name = cb.dataset.name, accId = String(cb.dataset.accountId || '');
+        const locSel = tplSelect.cloneNode(true);
+        locSel.id = ''; locSel.name = 'locationIds';
+        locSel.className = 'tbl-select'; locSel.required = true; locSel.value = '';
+        Array.from(locSel.querySelectorAll('option[data-account-id]')).forEach(opt => {
+            if (accId && opt.dataset.accountId && opt.dataset.accountId !== accId) opt.remove();
+        });
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                <code title="${escH(sku)}">${escH(sku)}</code>
+                <input type="hidden" name="productIds" value="${escH(pid)}"/>
+            </td>
+            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escH(name)}">${escH(name)}</td>
+            <td class="td-loc"></td>
+            <td><input type="number" name="quantities" class="tbl-input" min="1" required placeholder="수량"/></td>
+            <td><input type="text" name="memos" class="tbl-input" placeholder="메모 (선택)"/></td>`;
+        tr.querySelector('.td-loc').appendChild(locSel);
+        tbody.appendChild(tr);
+    });
+    document.getElementById('bulkModalOverlay').style.display = 'flex';
+}
+function closeBulkModal() {
+    document.getElementById('bulkModalOverlay').style.display = 'none';
+}
+function validateBulkForm() {
+    for (const sel of document.querySelectorAll('#bulkTableBody select[name="locationIds"]')) {
+        if (!sel.value) { alert('모든 행의 로케이션을 선택해 주세요.'); sel.focus(); return false; }
+    }
+    for (const inp of document.querySelectorAll('#bulkTableBody input[name="quantities"]')) {
+        if (!inp.value || Number(inp.value) < 1) { alert('수량은 1 이상이어야 합니다.'); inp.focus(); return false; }
+    }
+    return true;
+}
+function escH(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ESC: 모달 → 패널 순으로 닫기
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('bulkModalOverlay').style.display !== 'none') closeBulkModal();
+    else if (document.getElementById('productFormArea').style.display !== 'none') resetPanel();
+});
+
+// 페이지 로드 시 바코드 입력창 포커스
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('barcodeInput').focus();
+});
+</script>
+</body>
+</html>

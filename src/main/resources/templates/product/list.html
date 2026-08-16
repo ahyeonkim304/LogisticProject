@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('상품 관리')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">상품 관리</h1>
+            <a th:href="@{/products(action='new')}" class="btn btn-primary">+ 상품 등록</a>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <!-- 검색 필터 -->
+            <div class="filter-bar">
+                <form th:action="@{/products}" method="get" class="filter-form">
+                    <input type="text" name="keyword" th:value="${keyword}"
+                           placeholder="SKU 또는 상품명 검색" class="form-input search-input"/>
+                    <button type="submit" class="btn btn-secondary">검색</button>
+                    <a th:href="@{/products}" class="btn btn-outline">초기화</a>
+                </form>
+            </div>
+
+            <!-- 상품 목록 -->
+            <div class="card">
+                <div class="card-body">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>SKU</th>
+                            <th>상품명</th>
+                            <th>안전재고</th>
+                            <th>현재재고</th>
+                            <th>재고상태</th>
+                            <th>관리</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:if="${products.isEmpty()}">
+                            <td colspan="7" class="text-center text-muted">등록된 상품이 없습니다.</td>
+                        </tr>
+                        <tr th:each="p : ${products}">
+                            <td th:text="${p.id}">-</td>
+                            <td><code th:text="${p.sku}">-</code></td>
+                            <td th:text="${p.name}">-</td>
+                            <td th:text="${p.safetyStock}">0</td>
+                            <td th:text="${p.currentStock}">0</td>
+                            <td>
+                                <span th:if="${p.currentStock <= p.safetyStock}" class="badge badge-outbound-pending">재고 부족</span>
+                                <span th:if="${p.currentStock > p.safetyStock}" class="badge badge-inbound-done">정상</span>
+                            </td>
+                            <td class="action-col">
+                                <a th:href="@{/products(editId=${p.id}, keyword=${keyword})}"
+                                   class="btn btn-sm btn-secondary">수정</a>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        th:data-id="${p.id}"
+                                        th:data-name="${p.name}"
+                                        onclick="openDeleteModal(this.dataset.id, this.dataset.name)">삭제</button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div th:replace="~{fragments/layout :: pagination(${products}, '/products', ${keyword})}"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     백드롭 + 우측 슬라이드 패널 (등록 / 수정)
+     ══════════════════════════════════════════════════════ -->
+<div class="panel-backdrop"
+     th:classappend="${panelOpen} ? ' open'"
+     onclick="closePanel()"></div>
+
+<div class="side-panel" th:classappend="${panelOpen} ? ' open'">
+    <div class="side-panel-header">
+        <span class="side-panel-title" th:text="${panelTitle ?: '상품'}">상품</span>
+        <button type="button" class="side-panel-close" onclick="closePanel()">✕</button>
+    </div>
+
+    <div class="side-panel-body">
+        <div th:if="${errorMsg}" class="alert alert-error" th:text="${errorMsg}"></div>
+
+        <form th:action="${editId != null ? '/products/' + editId : '/products'}"
+              th:object="${dto}"
+              method="post">
+
+            <!-- ADMIN — 고객사 선택 (신규 등록 시) -->
+            <div class="form-group" th:if="${accounts != null and editId == null}">
+                <label class="form-label">고객사 <span class="required">*</span></label>
+                <th:block th:if="${#lists.isEmpty(accounts)}">
+                    <div style="padding:10px 12px; background:#fef3c7; border-radius:6px; font-size:13px; color:#92400e;">
+                        승인된 고객사가 없습니다.
+                        <a th:href="@{/admin/accounts}" style="color:#1d4ed8;">계정 관리에서 승인</a>하세요.
+                    </div>
+                </th:block>
+                <th:block th:unless="${#lists.isEmpty(accounts)}">
+                    <select th:field="*{accountId}" class="form-select" required>
+                        <option value="">— 고객사 선택 —</option>
+                        <option th:each="acc : ${accounts}"
+                                th:value="${acc.id}"
+                                th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                           ? acc.companyName + ' (' + acc.username + ')'
+                                           : acc.username}">
+                        </option>
+                    </select>
+                    <p class="field-error" th:if="${#fields.hasErrors('accountId')}" th:errors="*{accountId}"></p>
+                </th:block>
+            </div>
+
+            <!-- ADMIN — 수정 시 현재 고객사 표시 (읽기 전용) -->
+            <div class="form-group" th:if="${accounts != null and editId != null}">
+                <label class="form-label">고객사</label>
+                <div style="padding:8px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:14px; color:#475569;">
+                    <span th:each="acc : ${accounts}"
+                          th:if="${acc.id == currentAccountId}"
+                          th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                     ? acc.companyName + ' (' + acc.username + ')'
+                                     : acc.username}">-</span>
+                </div>
+                <input type="hidden" th:field="*{accountId}" th:value="${currentAccountId}"/>
+            </div>
+
+            <!-- SKU -->
+            <div class="form-group">
+                <label class="form-label">SKU <span class="required">*</span></label>
+                <input type="text" th:field="*{sku}" class="form-input"
+                       th:classappend="${#fields.hasErrors('sku')} ? ' input-error'"
+                       placeholder="예: SKU-001"
+                       th:readonly="${editId != null}"
+                       autocomplete="off"/>
+                <p class="field-error" th:if="${#fields.hasErrors('sku')}" th:errors="*{sku}"></p>
+            </div>
+
+            <!-- 상품명 -->
+            <div class="form-group">
+                <label class="form-label">상품명 <span class="required">*</span></label>
+                <input type="text" th:field="*{name}" class="form-input"
+                       th:classappend="${#fields.hasErrors('name')} ? ' input-error'"
+                       placeholder="상품명을 입력하세요"/>
+                <p class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></p>
+            </div>
+
+            <!-- 안전재고 -->
+            <div class="form-group">
+                <label class="form-label">안전 재고 수량</label>
+                <input type="number" th:field="*{safetyStock}" class="form-input"
+                       min="0" placeholder="0"/>
+                <p class="field-error" th:if="${#fields.hasErrors('safetyStock')}" th:errors="*{safetyStock}"></p>
+            </div>
+
+            <!-- 버튼 -->
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary"
+                        th:text="${editId != null ? '수정 완료' : '등록'}">등록</button>
+                <button type="button" class="btn btn-secondary" onclick="closePanel()">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div id="deleteProductModal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:12px; padding:28px 24px; width:380px; max-width:90vw; box-shadow:0 8px 32px rgba(0,0,0,.18);">
+        <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:20px;">
+            <div style="font-size:28px; flex-shrink:0;">⚠️</div>
+            <div>
+                <div style="font-size:15px; font-weight:700; color:#1e293b; margin-bottom:4px;">상품 삭제</div>
+                <div style="font-size:13px; color:#64748b;">
+                    <strong id="deleteProductName" style="color:#1e293b;"></strong>을(를) 삭제합니다.<br>
+                    이 작업은 되돌릴 수 없습니다.
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button type="button" class="btn btn-outline" onclick="closeDeleteModal()">취소</button>
+            <!-- th:action → Thymeleaf가 CSRF 토큰 hidden input 자동 주입 / JS에서 action만 교체 -->
+            <form id="deleteProductForm" th:action="@{/products/0/delete}" method="post" style="display:inline;">
+                <button type="submit" class="btn btn-danger">삭제</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+/* ── 사이드 패널 ── */
+.panel-backdrop { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:298; }
+.panel-backdrop.open { display:block; }
+.side-panel { position:fixed; top:0; right:0; width:440px; height:100vh; background:#fff; border-left:1px solid var(--color-border); box-shadow:-6px 0 24px rgba(0,0,0,.12); z-index:299; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+.side-panel.open { transform:translateX(0); }
+.side-panel-header { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:60px; border-bottom:1px solid var(--color-border); background:#f8fafc; flex-shrink:0; }
+.side-panel-title  { font-size:16px; font-weight:700; color:var(--color-text); }
+.side-panel-close  { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border:none; background:transparent; border-radius:6px; cursor:pointer; font-size:16px; color:#64748b; transition:background .15s, color .15s; }
+.side-panel-close:hover { background:#f1f5f9; color:#1e293b; }
+.side-panel-body  { flex:1; overflow-y:auto; padding:24px; }
+.input-error { border-color:var(--color-danger) !important; box-shadow:0 0 0 3px rgba(239,68,68,.1) !important; }
+</style>
+
+<script>
+function closePanel() {
+    document.querySelector('.side-panel').classList.remove('open');
+    document.querySelector('.panel-backdrop').classList.remove('open');
+    history.replaceState(null, '', '/products');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+function openDeleteModal(id, name) {
+    document.getElementById('deleteProductName').textContent = name;
+    document.getElementById('deleteProductForm').action = '/products/' + id + '/delete';
+    document.getElementById('deleteProductModal').style.display = 'flex';
+}
+function closeDeleteModal() {
+    document.getElementById('deleteProductModal').style.display = 'none';
+}
+document.getElementById('deleteProductModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+});
+</script>
+</body>
+</html>

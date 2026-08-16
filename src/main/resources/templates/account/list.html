@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('계정 관리')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">계정 관리</h1>
+            <a th:href="@{/admin/accounts(action='create', tab=${tab})}"
+               class="btn btn-primary">+ 계정 생성</a>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <!-- 탭 바 -->
+            <div class="tab-bar">
+                <a href="#" class="tab-item" id="tabAll"
+                   onclick="switchTab('all'); return false;">
+                    전체
+                    <span class="tab-count" th:text="${allAccounts.totalElements}">0</span>
+                </a>
+                <a href="#" class="tab-item" id="tabPending"
+                   onclick="switchTab('pending'); return false;">
+                    승인 대기
+                    <span class="tab-count" th:text="${#lists.size(pendingAccounts)}">0</span>
+                </a>
+                <a href="#" class="tab-item" id="tabApproved"
+                   onclick="switchTab('approved'); return false;">
+                    승인 완료
+                    <span class="tab-count" th:text="${#lists.size(approvedAccounts)}">0</span>
+                </a>
+            </div>
+
+            <!-- ══ 탭 1: 전체 ══ -->
+            <div id="paneAll">
+                <div class="filter-bar" style="margin-bottom:16px;">
+                    <form class="filter-form" th:action="@{/admin/accounts}" method="get">
+                        <input type="hidden" name="tab" value="all"/>
+                        <input type="text" name="keyword" class="form-input search-input"
+                               th:value="${keyword}" placeholder="아이디 또는 회사명 검색"/>
+                        <button type="submit" class="btn btn-secondary">검색</button>
+                        <a th:href="@{/admin/accounts(tab='all')}" class="btn btn-outline">초기화</a>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-body" style="padding:0;">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>아이디</th>
+                                <th>회사명</th>
+                                <th>권한</th>
+                                <th>상태</th>
+                                <th>가입일시</th>
+                                <th>처리</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${allAccounts.isEmpty()}">
+                                <td colspan="7" class="text-center text-muted" style="padding:32px;">계정이 없습니다.</td>
+                            </tr>
+                            <tr th:each="a : ${allAccounts}">
+                                <td th:text="${a.id}" style="color:var(--color-muted);">-</td>
+                                <td><strong th:text="${a.username}">-</strong></td>
+                                <td th:text="${a.companyName != null ? a.companyName : '-'}">-</td>
+                                <td>
+                                    <span class="badge"
+                                          th:classappend="${a.roleLabel == '관리자' ? ' badge-ready-to-ship' : ' badge-secondary'}"
+                                          th:text="${a.roleLabel}">-</span>
+                                </td>
+                                <td>
+                                    <span class="badge"
+                                          th:classappend="${a.statusBadgeClass}"
+                                          th:text="${a.statusLabel}">-</span>
+                                </td>
+                                <td th:text="${a.createdAt != null ? #temporals.format(a.createdAt, 'yyyy-MM-dd HH:mm') : '-'}"
+                                    style="color:var(--color-muted); font-size:12px;">-</td>
+                                <td class="action-col">
+                                    <!-- 승인/거부 버튼 -->
+                                    <th:block th:if="${a.status.name() == 'PENDING'}">
+                                        <form th:action="@{/admin/accounts/{id}/approve(id=${a.id})}"
+                                              method="post" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-primary">승인</button>
+                                        </form>
+                                        <form th:action="@{/admin/accounts/{id}/reject(id=${a.id})}"
+                                              method="post" style="display:inline;"
+                                              onsubmit="return confirm('이 계정을 거부하시겠습니까?')">
+                                            <button type="submit" class="btn btn-sm btn-danger">거부</button>
+                                        </form>
+                                    </th:block>
+                                    <th:block th:if="${a.status.name() == 'REJECTED'}">
+                                        <form th:action="@{/admin/accounts/{id}/approve(id=${a.id})}"
+                                              method="post" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-secondary">재승인</button>
+                                        </form>
+                                    </th:block>
+                                    <!-- 수정 버튼 -->
+                                    <a th:href="@{/admin/accounts(tab='all', keyword=${keyword}, editId=${a.id})}"
+                                       class="btn btn-sm btn-outline">수정</a>
+                                    <!-- 삭제 버튼 -->
+                                    <form th:action="@{/admin/accounts/{id}/delete(id=${a.id})}"
+                                          method="post" style="display:inline;">
+                                        <input type="hidden" name="returnTab" value="all"/>
+                                        <button type="submit" class="btn btn-sm btn-danger"
+                                                th:data-username="${a.username}"
+                                                onclick="return confirm('계정 \'' + this.dataset.username + '\' 을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')">
+                                            삭제
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 전체 탭 페이지네이션 -->
+                <div class="pagination-wrap" th:if="${allAccounts.totalPages > 1}">
+                    <div class="page-info"
+                         th:text="'전체 ' + ${allAccounts.totalElements} + '건 / '
+                                  + (${allAccounts.number} + 1) + ' 페이지 / 총 '
+                                  + ${allAccounts.totalPages} + ' 페이지'"></div>
+                    <div class="page-buttons">
+                        <a th:if="${!allAccounts.first}"
+                           th:href="@{/admin/accounts(tab='all', page=${allAccounts.number - 1}, keyword=${keyword})}"
+                           class="page-btn">&laquo; 이전</a>
+                        <th:block th:each="i : ${#numbers.sequence(0, allAccounts.totalPages - 1)}">
+                            <a th:href="@{/admin/accounts(tab='all', page=${i}, keyword=${keyword})}"
+                               th:text="${i + 1}"
+                               th:classappend="${i == allAccounts.number ? ' active' : ''}"
+                               class="page-btn"></a>
+                        </th:block>
+                        <a th:if="${!allAccounts.last}"
+                           th:href="@{/admin/accounts(tab='all', page=${allAccounts.number + 1}, keyword=${keyword})}"
+                           class="page-btn">다음 &raquo;</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ 탭 2: 승인 대기 ══ -->
+            <div id="panePending" style="display:none;">
+                <!-- 검색 바 -->
+                <div class="filter-bar" style="margin-bottom:16px;">
+                    <form class="filter-form" th:action="@{/admin/accounts}" method="get">
+                        <input type="hidden" name="tab" value="pending"/>
+                        <input type="text" name="pendingKeyword" class="form-input search-input"
+                               th:value="${pendingKeyword}" placeholder="아이디 또는 회사명 검색"/>
+                        <button type="submit" class="btn btn-secondary">검색</button>
+                        <a th:href="@{/admin/accounts(tab='pending')}" class="btn btn-outline">초기화</a>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-body" style="padding:0;">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>아이디</th>
+                                <th>회사명</th>
+                                <th>가입일시</th>
+                                <th>처리</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(pendingAccounts)}">
+                                <td colspan="5" class="text-center text-muted" style="padding:32px;">
+                                    <span th:if="${pendingKeyword != null and !#strings.isEmpty(pendingKeyword)}">
+                                        검색 결과가 없습니다.
+                                    </span>
+                                    <span th:unless="${pendingKeyword != null and !#strings.isEmpty(pendingKeyword)}">
+                                        승인 대기 계정이 없습니다.
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr th:each="a : ${pendingAccounts}">
+                                <td th:text="${a.id}" style="color:var(--color-muted);">-</td>
+                                <td><strong th:text="${a.username}">-</strong></td>
+                                <td th:text="${a.companyName != null ? a.companyName : '-'}">-</td>
+                                <td th:text="${a.createdAt != null ? #temporals.format(a.createdAt, 'yyyy-MM-dd HH:mm') : '-'}"
+                                    style="color:var(--color-muted); font-size:12px;">-</td>
+                                <td class="action-col">
+                                    <form th:action="@{/admin/accounts/{id}/approve(id=${a.id})}"
+                                          method="post" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-primary">승인</button>
+                                    </form>
+                                    <form th:action="@{/admin/accounts/{id}/reject(id=${a.id})}"
+                                          method="post" style="display:inline;"
+                                          onsubmit="return confirm('이 계정을 거부하시겠습니까?')">
+                                        <button type="submit" class="btn btn-sm btn-danger">거부</button>
+                                    </form>
+                                    <a th:href="@{/admin/accounts(tab='pending', pendingKeyword=${pendingKeyword}, editId=${a.id})}"
+                                       class="btn btn-sm btn-outline">수정</a>
+                                    <form th:action="@{/admin/accounts/{id}/delete(id=${a.id})}"
+                                          method="post" style="display:inline;">
+                                        <input type="hidden" name="returnTab" value="pending"/>
+                                        <button type="submit" class="btn btn-sm btn-danger"
+                                                th:data-username="${a.username}"
+                                                onclick="return confirm('계정 \'' + this.dataset.username + '\' 을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')">
+                                            삭제
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ 탭 3: 승인 완료 ══ -->
+            <div id="paneApproved" style="display:none;">
+                <!-- 검색 바 -->
+                <div class="filter-bar" style="margin-bottom:16px;">
+                    <form class="filter-form" th:action="@{/admin/accounts}" method="get">
+                        <input type="hidden" name="tab" value="approved"/>
+                        <input type="text" name="approvedKeyword" class="form-input search-input"
+                               th:value="${approvedKeyword}" placeholder="아이디 또는 회사명 검색"/>
+                        <button type="submit" class="btn btn-secondary">검색</button>
+                        <a th:href="@{/admin/accounts(tab='approved')}" class="btn btn-outline">초기화</a>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-body" style="padding:0;">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>아이디</th>
+                                <th>회사명</th>
+                                <th>권한</th>
+                                <th>가입일시</th>
+                                <th>관리</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(approvedAccounts)}">
+                                <td colspan="6" class="text-center text-muted" style="padding:32px;">
+                                    <span th:if="${approvedKeyword != null and !#strings.isEmpty(approvedKeyword)}">
+                                        검색 결과가 없습니다.
+                                    </span>
+                                    <span th:unless="${approvedKeyword != null and !#strings.isEmpty(approvedKeyword)}">
+                                        승인 완료된 계정이 없습니다.
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr th:each="a : ${approvedAccounts}">
+                                <td th:text="${a.id}" style="color:var(--color-muted);">-</td>
+                                <td><strong th:text="${a.username}">-</strong></td>
+                                <td th:text="${a.companyName != null ? a.companyName : '-'}">-</td>
+                                <td>
+                                    <span class="badge"
+                                          th:classappend="${a.roleLabel == '관리자' ? ' badge-ready-to-ship' : ' badge-secondary'}"
+                                          th:text="${a.roleLabel}">-</span>
+                                </td>
+                                <td th:text="${a.createdAt != null ? #temporals.format(a.createdAt, 'yyyy-MM-dd HH:mm') : '-'}"
+                                    style="color:var(--color-muted); font-size:12px;">-</td>
+                                <td class="action-col">
+                                    <a th:href="@{/admin/accounts(tab='approved', approvedKeyword=${approvedKeyword}, editId=${a.id})}"
+                                       class="btn btn-sm btn-outline">수정</a>
+                                    <form th:action="@{/admin/accounts/{id}/delete(id=${a.id})}"
+                                          method="post" style="display:inline;">
+                                        <input type="hidden" name="returnTab" value="approved"/>
+                                        <button type="submit" class="btn btn-sm btn-danger"
+                                                th:data-username="${a.username}"
+                                                onclick="return confirm('계정 \'' + this.dataset.username + '\' 을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')">
+                                            삭제
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     백드롭 + 우측 슬라이드 패널 (계정 생성 / 수정 공용)
+     ══════════════════════════════════════════════════════ -->
+<div class="panel-backdrop"
+     th:classappend="${panelOpen == true or createPanel == true} ? ' open'"
+     onclick="closePanel()"></div>
+
+<div class="side-panel" th:classappend="${panelOpen == true or createPanel == true} ? ' open'">
+    <div class="side-panel-header">
+        <span class="side-panel-title"
+              th:text="${createPanel} ? '+ 계정 생성' : '계정 수정'">계정 수정</span>
+        <button type="button" class="side-panel-close" onclick="closePanel()">✕</button>
+    </div>
+
+    <div class="side-panel-body">
+
+        <!-- ══ 생성 모드 ══ -->
+        <div th:if="${createPanel}">
+            <form th:action="@{/admin/accounts/create}"
+                  th:object="${createDto}"
+                  method="post">
+                <input type="hidden" name="returnTab" th:value="${tab}"/>
+
+                <!-- 아이디 -->
+                <div class="form-group">
+                    <label class="form-label">아이디 <span class="required">*</span></label>
+                    <input type="text" th:field="*{username}" class="form-input"
+                           placeholder="로그인 아이디" autocomplete="off" required/>
+                </div>
+
+                <!-- 비밀번호 -->
+                <div class="form-group">
+                    <label class="form-label">비밀번호 <span class="required">*</span></label>
+                    <input type="password" th:field="*{password}" class="form-input"
+                           placeholder="비밀번호" autocomplete="new-password" required/>
+                </div>
+
+                <!-- 회사명 -->
+                <div class="form-group">
+                    <label class="form-label">회사명</label>
+                    <input type="text" th:field="*{companyName}" class="form-input"
+                           placeholder="회사명 (선택)"/>
+                </div>
+
+                <!-- 권한 -->
+                <div class="form-group">
+                    <label class="form-label">권한 <span class="required">*</span></label>
+                    <select th:field="*{role}" class="form-select">
+                        <option value="CLIENT">일반 (CLIENT)</option>
+                        <option value="ADMIN">관리자 (ADMIN)</option>
+                    </select>
+                </div>
+
+                <!-- 상태 -->
+                <div class="form-group">
+                    <label class="form-label">상태 <span class="required">*</span></label>
+                    <select th:field="*{status}" class="form-select">
+                        <option value="APPROVED">승인 완료 (APPROVED)</option>
+                        <option value="PENDING">승인 대기 (PENDING)</option>
+                        <option value="REJECTED">승인 거부 (REJECTED)</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">계정 생성</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePanel()">취소</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ══ 수정 모드 ══ -->
+        <div th:unless="${createPanel}">
+
+            <!-- 계정 기본 정보 (읽기 전용) -->
+            <div th:if="${editAccount != null}"
+                 style="background:#f8fafc; border:1px solid var(--color-border); border-radius:8px;
+                        padding:14px 16px; margin-bottom:20px;">
+                <div style="display:grid; grid-template-columns:72px 1fr; row-gap:6px; font-size:13px;">
+                    <span style="color:var(--color-muted);">ID</span>
+                    <span th:text="${editAccount.id}" style="font-weight:600;">-</span>
+                    <span style="color:var(--color-muted);">아이디</span>
+                    <span th:text="${editAccount.username}" style="font-weight:600;">-</span>
+                    <span style="color:var(--color-muted);">가입일시</span>
+                    <span style="font-size:12px; color:var(--color-muted);"
+                          th:text="${editAccount.createdAt != null
+                                     ? #temporals.format(editAccount.createdAt, 'yyyy-MM-dd HH:mm')
+                                     : '-'}">-</span>
+                </div>
+            </div>
+
+            <!-- 수정 폼 -->
+            <form th:action="${editId != null ? '/admin/accounts/' + editId + '/update' : '#'}"
+                  th:object="${editDto}"
+                  method="post">
+                <input type="hidden" name="returnTab" th:value="${tab}"/>
+
+                <!-- 회사명 -->
+                <div class="form-group">
+                    <label class="form-label">회사명</label>
+                    <input type="text" th:field="*{companyName}" class="form-input"
+                           placeholder="회사명을 입력하세요"/>
+                </div>
+
+                <!-- 권한 -->
+                <div class="form-group">
+                    <label class="form-label">권한 <span class="required">*</span></label>
+                    <select th:field="*{role}" class="form-select">
+                        <option value="CLIENT">일반 (CLIENT)</option>
+                        <option value="ADMIN">관리자 (ADMIN)</option>
+                    </select>
+                </div>
+
+                <!-- 상태 -->
+                <div class="form-group">
+                    <label class="form-label">상태 <span class="required">*</span></label>
+                    <select th:field="*{status}" class="form-select">
+                        <option value="PENDING">승인 대기 (PENDING)</option>
+                        <option value="APPROVED">승인 완료 (APPROVED)</option>
+                        <option value="REJECTED">승인 거부 (REJECTED)</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">수정 완료</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePanel()">취소</button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+</div>
+
+<style>
+/* ── 사이드 패널 ── */
+.panel-backdrop { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:298; }
+.panel-backdrop.open { display:block; }
+.side-panel { position:fixed; top:0; right:0; width:420px; height:100vh; background:#fff;
+              border-left:1px solid var(--color-border); box-shadow:-6px 0 24px rgba(0,0,0,.12);
+              z-index:299; display:flex; flex-direction:column;
+              transform:translateX(100%); transition:transform .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+.side-panel.open { transform:translateX(0); }
+.side-panel-header { display:flex; align-items:center; justify-content:space-between;
+                     padding:0 24px; height:60px; border-bottom:1px solid var(--color-border);
+                     background:#f8fafc; flex-shrink:0; }
+.side-panel-title  { font-size:16px; font-weight:700; color:var(--color-text); }
+.side-panel-close  { width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+                     border:none; background:transparent; border-radius:6px; cursor:pointer;
+                     font-size:16px; color:#64748b; transition:background .15s, color .15s; }
+.side-panel-close:hover { background:#f1f5f9; color:#1e293b; }
+.side-panel-body  { flex:1; overflow-y:auto; padding:24px; }
+</style>
+
+<script th:inline="javascript">
+/*<![CDATA[*/
+const INIT_TAB = /*[[${tab}]]*/ 'all';
+/*]]>*/
+
+const PANES = { all: 'paneAll', pending: 'panePending', approved: 'paneApproved' };
+const TABS  = { all: 'tabAll',  pending: 'tabPending',  approved: 'tabApproved'  };
+
+function switchTab(tab) {
+    Object.keys(PANES).forEach(function(k) {
+        document.getElementById(PANES[k]).style.display = (k === tab) ? 'block' : 'none';
+        document.getElementById(TABS[k]).classList.toggle('tab-active', k === tab);
+    });
+}
+
+function closePanel() {
+    document.querySelector('.side-panel').classList.remove('open');
+    document.querySelector('.panel-backdrop').classList.remove('open');
+    history.replaceState(null, '', '/admin/accounts?tab=' + INIT_TAB);
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePanel();
+});
+
+// 서버에서 전달된 탭으로 초기화
+switchTab(INIT_TAB);
+</script>
+</body>
+</html>

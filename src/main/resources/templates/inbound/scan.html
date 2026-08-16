@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('바코드 스캔 입고')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <a th:href="@{/inbound}" class="btn btn-outline btn-sm">← 입고 목록</a>
+                <h1 class="page-title">바코드 스캔 입고</h1>
+            </div>
+        </header>
+
+        <div class="content-body">
+
+            <!-- 플래시 메시지 -->
+            <div th:if="${successMsg}"
+                 class="alert alert-success"
+                 style="display:flex; align-items:center; gap:10px; font-size:15px;
+                        font-weight:600; margin-bottom:16px;"
+                 th:text="${successMsg}"></div>
+            <div th:if="${errorMsg}"
+                 class="alert alert-error"
+                 style="font-weight:600; margin-bottom:16px;"
+                 th:text="${errorMsg}"></div>
+
+            <!-- ══ 메인 폼 ══ -->
+            <form id="scanForm" th:action="@{/inbound/scan/detail}" method="post">
+                <!-- 선택된 팔레트 ID (JS로 업데이트) -->
+                <input type="hidden" name="palletId" id="hiddenPalletId" value=""/>
+
+                <div class="scan-layout">
+
+                    <!-- ══════════════════════════════════
+                         좌: 선택 팔레트 정보 + 측정값 + 주문번호
+                         ══════════════════════════════════ -->
+                    <div class="scan-left">
+                        <div class="card scan-pallet-card" id="palletCard">
+
+                            <!-- 카드 헤더 — 선택된 팔레트명 -->
+                            <div class="card-header">
+                                <div>
+                                    <div class="scan-label-tiny">선택 팔레트</div>
+                                    <h2 class="card-title" id="palletTitle"
+                                        style="margin:0; font-size:15px; font-weight:700;">
+                                        미선택
+                                    </h2>
+                                </div>
+                                <div style="display:flex; gap:6px;">
+                                    <button type="button" id="clearPalletBtn"
+                                            class="btn btn-sm btn-outline"
+                                            style="display:none;"
+                                            onclick="clearPalletSelection()">선택 해제</button>
+                                    <button type="button" class="btn btn-sm btn-outline"
+                                            onclick="clearMeasurements()">초기화</button>
+                                </div>
+                            </div>
+
+                            <div class="card-body">
+
+                                <!-- ── 박스 치수 ── -->
+                                <div class="scan-section-title">박스 치수</div>
+                                <div class="measurement-grid">
+                                    <div class="form-group" style="margin-bottom:0;">
+                                        <label class="form-label">가로 (cm)</label>
+                                        <input type="number" name="width" id="inWidth"
+                                               step="0.01" min="0" class="form-input measure-input"
+                                               placeholder="0.00"
+                                               oninput="calcVolumeWeight(); saveMeasurements();"/>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:0;">
+                                        <label class="form-label">세로 (cm)</label>
+                                        <input type="number" name="depth" id="inDepth"
+                                               step="0.01" min="0" class="form-input measure-input"
+                                               placeholder="0.00"
+                                               oninput="calcVolumeWeight(); saveMeasurements();"/>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:0;">
+                                        <label class="form-label">높이 (cm)</label>
+                                        <input type="number" name="height" id="inHeight"
+                                               step="0.01" min="0" class="form-input measure-input"
+                                               placeholder="0.00"
+                                               oninput="calcVolumeWeight(); saveMeasurements();"/>
+                                    </div>
+                                </div>
+
+                                <!-- ── 무게 ── -->
+                                <div class="scan-section-title" style="margin-top:14px;">무게</div>
+                                <div class="form-group">
+                                    <label class="form-label">실제무게 (kg)</label>
+                                    <input type="number" name="actualWeight" id="inActualWeight"
+                                           step="0.001" min="0" class="form-input"
+                                           placeholder="0.000"
+                                           oninput="calcAppliedWeight(); saveMeasurements();"/>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">부피기준단위</label>
+                                    <select name="volumeDivisor" id="inDivisor" class="form-select"
+                                            onchange="calcVolumeWeight(); saveMeasurements();">
+                                        <option value="">— 선택 —</option>
+                                        <option value="5000">5,000 (항공 일반)</option>
+                                        <option value="6000">6,000 (항공 대형)</option>
+                                        <option value="3000">3,000 (해운)</option>
+                                    </select>
+                                </div>
+
+                                <!-- ── 무게 계산 결과 ── -->
+                                <div class="weight-result-box">
+                                    <div class="weight-result-row">
+                                        <span class="weight-result-label">부피무게</span>
+                                        <span class="weight-result-value"
+                                              id="displayVolumeWeight">— kg</span>
+                                    </div>
+                                    <div class="weight-result-row">
+                                        <span class="weight-result-label">실제무게</span>
+                                        <span class="weight-result-value"
+                                              id="displayActualWeight">— kg</span>
+                                    </div>
+                                    <div class="weight-result-row highlight">
+                                        <span class="weight-result-label">적용무게</span>
+                                        <span class="weight-result-value" id="displayAppliedWeight"
+                                              style="font-size:22px; color:var(--color-primary);">— kg</span>
+                                    </div>
+                                </div>
+
+                                <hr style="border:none; border-top:1px solid #e2e8f0; margin:16px 0;"/>
+
+                                <!-- ── 주문번호 / 바코드 입력 ── -->
+                                <div class="scan-section-title">주문번호</div>
+                                <input type="text" name="barcode" id="barcodeInput"
+                                       class="form-input"
+                                       style="font-size:18px; font-weight:700; letter-spacing:1px;
+                                              padding:12px 14px; width:100%; box-sizing:border-box;"
+                                       placeholder="스캔 또는 직접 입력..."
+                                       autocomplete="off" autofocus
+                                       th:value="${failBarcode}"/>
+                                <p style="margin-top:6px; font-size:12px; color:#94a3b8;">
+                                    ⏎ <strong>Enter</strong>키 입력 시 즉시 입고 처리됩니다
+                                </p>
+
+                                <!-- ── 처리 결과 안내 ── -->
+                                <div class="scan-result-guide">
+                                    <div class="scan-result-row" id="guideWithPallet"
+                                         style="display:none;">
+                                        <span class="scan-result-icon">✅</span>
+                                        <div>
+                                            <div style="font-weight:600; font-size:13px;">
+                                                팔레트 선택됨</div>
+                                            <div style="font-size:12px; color:#64748b;">
+                                                입고 완료 → 출고 대기 자동 전환</div>
+                                        </div>
+                                    </div>
+                                    <div class="scan-result-row" id="guideNoPallet">
+                                        <span class="scan-result-icon">📦</span>
+                                        <div>
+                                            <div style="font-weight:600; font-size:13px;">
+                                                팔레트 미선택</div>
+                                            <div style="font-size:12px; color:#64748b;">
+                                                입고 완료 상태로 전환</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ── 수동 제출 버튼 ── -->
+                                <button type="submit" class="btn btn-primary"
+                                        style="width:100%; padding:14px; font-size:15px; margin-top:12px;">
+                                    입고 처리
+                                </button>
+
+                            </div><!-- /card-body -->
+                        </div><!-- /scan-pallet-card -->
+                    </div><!-- /scan-left -->
+
+                    <!-- ══════════════════════════════════
+                         우: 팔레트 리스트
+                         ══════════════════════════════════ -->
+                    <div class="scan-right">
+                        <div class="card scan-pallet-list-card">
+                            <div class="card-header">
+                                <h2 class="card-title">팔레트 리스트</h2>
+                                <span class="tab-count"
+                                      th:text="${#lists.size(pallets)}">0</span>
+                            </div>
+                            <!-- 팔레트 목록 영역 -->
+                            <div id="palletListContainer"
+                                 style="flex:1; overflow-y:auto;">
+                                <!-- JS로 렌더링 -->
+                            </div>
+                            <!-- 페이지네이션 -->
+                            <div id="palletPagination"
+                                 style="padding:10px 12px;
+                                        border-top:1px solid var(--color-border);
+                                        text-align:center; flex-shrink:0;">
+                            </div>
+                        </div>
+                    </div><!-- /scan-right -->
+
+                </div><!-- /scan-layout -->
+            </form>
+
+        </div><!-- /content-body -->
+    </div>
+</div>
+
+<!-- ══ 팔레트 데이터 (JS 전달용 숨김 DOM) ══ -->
+<div id="palletDataRoot" style="display:none;">
+    <div th:each="p : ${pallets}"
+         class="pd-item"
+         th:data-id="${p.id}"
+         th:data-code="${p.palletCode}"
+         th:data-name="${p.name != null ? p.name : ''}"
+         th:data-label="${p.displayLabel}"></div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!--  스타일                                    -->
+<!-- ══════════════════════════════════════════ -->
+<style>
+/* 레이아웃 */
+.scan-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+}
+.scan-right {
+    display: flex;
+    flex-direction: column;
+}
+.scan-pallet-list-card {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 180px);
+}
+
+/* 선택 팔레트 카드 — 기본: 점선 회색, 선택 시: 점선 파란색 */
+.scan-pallet-card {
+    border: 2px dashed #cbd5e1 !important;
+    transition: border-color .2s;
+}
+.scan-pallet-card.pallet-selected {
+    border: 2px dashed #3b82f6 !important;
+}
+
+/* 섹션 타이틀 */
+.scan-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+.scan-label-tiny {
+    font-size: 10px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    margin-bottom: 2px;
+}
+
+/* 치수 3열 그리드 */
+.measurement-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+}
+
+/* 무게 결과 박스 */
+.weight-result-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 12px;
+}
+.weight-result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+}
+.weight-result-row.highlight {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 8px;
+    padding-top: 10px;
+}
+.weight-result-label { font-size: 12px; color: #64748b; }
+.weight-result-value { font-size: 14px; font-weight: 700; color: #1e293b; }
+
+/* 결과 안내 박스 */
+.scan-result-guide {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 12px;
+}
+.scan-result-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.scan-result-icon { font-size: 18px; }
+
+/* 팔레트 리스트 아이템 */
+.pallet-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background .12s;
+    border-left: 3px solid transparent;
+}
+.pallet-list-item:hover  { background: #f8fafc; }
+.pallet-list-item:last-child { border-bottom: none; }
+.pallet-list-item.active {
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+}
+.pallet-list-item .pl-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #1e293b;
+    word-break: break-all;
+}
+.pallet-list-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+/* 페이지네이션 */
+.pallet-pager {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.pallet-pager .pp-btn {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 6px;
+    font-size: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #475569;
+    transition: background .1s;
+}
+.pallet-pager .pp-btn:hover   { background: #f1f5f9; }
+.pallet-pager .pp-btn.active  {
+    background: var(--color-primary, #3b82f6);
+    color: #fff;
+    border-color: var(--color-primary, #3b82f6);
+}
+.pallet-pager .pp-ellipsis {
+    min-width: 24px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+@media (max-width: 960px) {
+    .scan-layout { grid-template-columns: 1fr; }
+    .measurement-grid { grid-template-columns: 1fr 1fr; }
+    .scan-pallet-list-card { max-height: 360px; }
+}
+</style>
+
+<!-- ══════════════════════════════════════════ -->
+<!--  스크립트                                  -->
+<!-- ══════════════════════════════════════════ -->
+<script>
+/* ──────────────────────────────────────────────
+   팔레트 데이터 — 숨김 DOM에서 추출
+   ────────────────────────────────────────────── */
+const PALLETS_DATA = Array.from(
+    document.querySelectorAll('#palletDataRoot .pd-item')
+).map(el => ({
+    id:    el.dataset.id,
+    code:  el.dataset.code,
+    name:  el.dataset.name  || '',
+    label: el.dataset.label || el.dataset.code
+}));
+
+const PAGE_SIZE = 10;
+let currentPage       = 0;
+let selectedPalletId  = null;
+
+/* ──────────────────────────────────────────────
+   팔레트 리스트 렌더링
+   ────────────────────────────────────────────── */
+function renderPalletList() {
+    const container = document.getElementById('palletListContainer');
+
+    if (PALLETS_DATA.length === 0) {
+        container.innerHTML =
+            '<div class="pallet-list-empty">등록된 팔레트가 없습니다</div>';
+        document.getElementById('palletPagination').innerHTML = '';
+        return;
+    }
+
+    const start = currentPage * PAGE_SIZE;
+    const page  = PALLETS_DATA.slice(start, start + PAGE_SIZE);
+
+    container.innerHTML = page.map(p => {
+        const isActive = (selectedPalletId === p.id);
+        return `<div class="pallet-list-item ${isActive ? 'active' : ''}"
+                     onclick="selectPallet(${JSON.stringify(p.id)}, ${JSON.stringify(p.code)}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.label)})">
+                    <span class="badge badge-outbound-pending"
+                          style="white-space:nowrap; font-size:11px; flex-shrink:0;">출고대기</span>
+                    <span class="pl-label">${escH(p.label)}</span>
+                </div>`;
+    }).join('');
+
+    renderPagination();
+}
+
+/* ──────────────────────────────────────────────
+   페이지네이션 렌더링
+   ────────────────────────────────────────────── */
+function renderPagination() {
+    const totalPages = Math.ceil(PALLETS_DATA.length / PAGE_SIZE);
+    const pager = document.getElementById('palletPagination');
+
+    if (totalPages <= 1) { pager.innerHTML = ''; return; }
+
+    /* 표시할 페이지 번호 계산 (처음 2, 끝 2, 현재 ±1) */
+    const show = new Set();
+    for (let i = 0; i < totalPages; i++) {
+        if (i < 2 || i >= totalPages - 2 || Math.abs(i - currentPage) <= 1) {
+            show.add(i);
+        }
+    }
+    const pages = Array.from(show).sort((a, b) => a - b);
+
+    let html = '<div class="pallet-pager">';
+    let prev = -2;
+    pages.forEach(i => {
+        if (i - prev > 1) {
+            html += '<div class="pp-ellipsis">…</div>';
+        }
+        html += `<button type="button"
+                         class="pp-btn ${i === currentPage ? 'active' : ''}"
+                         onclick="goPage(${i})">${i + 1}</button>`;
+        prev = i;
+    });
+    html += '</div>';
+    pager.innerHTML = html;
+}
+
+function goPage(p) {
+    currentPage = p;
+    renderPalletList();
+}
+
+/* ──────────────────────────────────────────────
+   팔레트 선택 / 해제
+   ────────────────────────────────────────────── */
+function selectPallet(id, code, name, label) {
+    selectedPalletId = id;
+    document.getElementById('hiddenPalletId').value = id;
+
+    /* 좌측 카드 타이틀 업데이트 */
+    const title = name ? `${code} (${name})` : code;
+    document.getElementById('palletTitle').textContent = title;
+    document.getElementById('palletCard').classList.add('pallet-selected');
+    document.getElementById('clearPalletBtn').style.display = 'inline-flex';
+
+    /* 안내 메시지 토글 */
+    document.getElementById('guideWithPallet').style.display = 'flex';
+    document.getElementById('guideNoPallet').style.display   = 'none';
+
+    /* 리스트 다시 그려 active 표시 */
+    renderPalletList();
+
+    /* 바코드 입력창에 포커스 */
+    document.getElementById('barcodeInput').focus();
+}
+
+function clearPalletSelection() {
+    selectedPalletId = null;
+    document.getElementById('hiddenPalletId').value = '';
+    document.getElementById('palletTitle').textContent = '미선택';
+    document.getElementById('palletCard').classList.remove('pallet-selected');
+    document.getElementById('clearPalletBtn').style.display = 'none';
+
+    document.getElementById('guideWithPallet').style.display = 'none';
+    document.getElementById('guideNoPallet').style.display   = 'flex';
+
+    renderPalletList();
+}
+
+/* ──────────────────────────────────────────────
+   무게 계산
+   ────────────────────────────────────────────── */
+function calcVolumeWeight() {
+    const w   = parseFloat(document.getElementById('inWidth').value)  || 0;
+    const d   = parseFloat(document.getElementById('inDepth').value)  || 0;
+    const h   = parseFloat(document.getElementById('inHeight').value) || 0;
+    const div = parseInt(document.getElementById('inDivisor').value)  || 0;
+
+    let vw = 0;
+    if (w > 0 && d > 0 && h > 0 && div > 0) vw = (w * d * h) / div;
+
+    document.getElementById('displayVolumeWeight').textContent =
+        vw > 0 ? vw.toFixed(3) + ' kg' : '— kg';
+
+    calcAppliedWeight(vw);
+}
+
+function calcAppliedWeight(vwArg) {
+    const actual = parseFloat(document.getElementById('inActualWeight').value) || 0;
+    const vw = (vwArg !== undefined) ? vwArg : 0;
+
+    document.getElementById('displayActualWeight').textContent =
+        actual > 0 ? actual.toFixed(3) + ' kg' : '— kg';
+
+    const applied = Math.max(actual, vw);
+    document.getElementById('displayAppliedWeight').textContent =
+        applied > 0 ? applied.toFixed(3) + ' kg' : '— kg';
+}
+
+/* ──────────────────────────────────────────────
+   측정값 localStorage 저장/복원/초기화
+   ────────────────────────────────────────────── */
+const STORAGE_KEY = 'inbound_scan_v2';
+
+function saveMeasurements() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        width:        document.getElementById('inWidth').value,
+        depth:        document.getElementById('inDepth').value,
+        height:       document.getElementById('inHeight').value,
+        actualWeight: document.getElementById('inActualWeight').value,
+        divisor:      document.getElementById('inDivisor').value
+    }));
+}
+
+function loadMeasurements() {
+    try {
+        const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        if (!d) return;
+        if (d.width)        document.getElementById('inWidth').value        = d.width;
+        if (d.depth)        document.getElementById('inDepth').value        = d.depth;
+        if (d.height)       document.getElementById('inHeight').value       = d.height;
+        if (d.actualWeight) document.getElementById('inActualWeight').value = d.actualWeight;
+        if (d.divisor)      document.getElementById('inDivisor').value      = d.divisor;
+        calcVolumeWeight();
+    } catch (e) { /* ignore */ }
+}
+
+function clearMeasurements() {
+    ['inWidth','inDepth','inHeight','inActualWeight'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('inDivisor').value = '';
+    localStorage.removeItem(STORAGE_KEY);
+    ['displayVolumeWeight','displayActualWeight','displayAppliedWeight'].forEach(id => {
+        document.getElementById(id).textContent = '— kg';
+    });
+}
+
+/* ──────────────────────────────────────────────
+   바코드 Enter → 폼 제출
+   ────────────────────────────────────────────── */
+document.getElementById('barcodeInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        if (this.value.trim()) {
+            document.getElementById('scanForm').submit();
+        }
+    }
+});
+
+/* ──────────────────────────────────────────────
+   유틸
+   ────────────────────────────────────────────── */
+function escH(s) {
+    return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/* ──────────────────────────────────────────────
+   초기화
+   ────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', function () {
+    loadMeasurements();
+    renderPalletList();
+    document.getElementById('barcodeInput').focus();
+});
+
+window.addEventListener('load', function () {
+    /* failBarcode 있으면 유지, 없으면 클리어 후 포커스 */
+    const bc = document.getElementById('barcodeInput');
+    if (!bc.value.trim()) bc.value = '';
+    bc.focus();
+    bc.select();
+});
+</script>
+</body>
+</html>

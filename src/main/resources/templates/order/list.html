@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('주문 관리')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">주문 관리</h1>
+            <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-outline" onclick="openBulkModal()">📂 엑셀 일괄 등록</button>
+                <button type="button" class="btn btn-primary"  onclick="openCreatePanel()">+ 주문 생성</button>
+            </div>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <!-- 검색바 -->
+            <div style="margin-bottom:12px;">
+                <form th:action="@{/orders}" method="get"
+                      style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <input type="hidden" name="status"
+                           th:if="${currentStatus != null}" th:value="${currentStatus}"/>
+                    <input type="text" name="keyword" class="form-input search-input"
+                           th:value="${keyword}" placeholder="주문번호 / 고객명 검색"
+                           style="max-width:260px;"/>
+                    <!-- ADMIN 전용: 고객사 필터 -->
+                    <select th:if="${accounts != null}" name="filterAccountId"
+                            class="form-select" style="min-width:160px;">
+                        <option value="">전체 고객사</option>
+                        <option th:each="acc : ${accounts}"
+                                th:value="${acc.id}"
+                                th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName) ? acc.companyName : acc.username}"
+                                th:selected="${filterAccountId != null and filterAccountId == acc.id}">
+                        </option>
+                    </select>
+                    <button type="submit" class="btn btn-secondary">검색</button>
+                    <a th:href="@{/orders}" class="btn btn-outline">초기화</a>
+                </form>
+            </div>
+
+            <!-- 상태 탭 (한글) -->
+            <div class="tab-bar">
+                <a th:href="@{/orders(keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                   th:classappend="${currentStatus == null ? ' tab-active' : ''}"
+                   class="tab-item">전체</a>
+                <a th:each="s : ${allStatuses}"
+                   th:href="@{/orders(status=${s}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                   th:classappend="${currentStatus == s ? ' tab-active' : ''}"
+                   th:text="${s.label}"
+                   class="tab-item">-</a>
+            </div>
+
+            <!-- 주문 목록 -->
+            <div class="card">
+                <div class="card-body" style="padding:0;">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>주문번호</th>
+                            <th>고객명</th>
+                            <th>상품 수</th>
+                            <th>총 수량</th>
+                            <th>상태</th>
+                            <th>관리</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:if="${orders.isEmpty()}">
+                            <td colspan="6" class="text-center text-muted" style="padding:32px;">주문이 없습니다.</td>
+                        </tr>
+                        <tr th:each="o : ${orders}" style="cursor:pointer;"
+                            th:onclick="'openDetailPanel(' + ${o.id} + ')'">
+                            <td style="font-weight:600; font-size:12px; white-space:nowrap;"
+                                th:text="${o.orderNo != null ? o.orderNo : '#' + o.id}">-</td>
+                            <td th:text="${o.customerName}">-</td>
+                            <td th:text="${o.items.size()}">0</td>
+                            <td th:text="${#aggregates.sum(o.items.![quantity])}">0</td>
+                            <td>
+                                <span class="badge"
+                                      th:classappend="${o.statusBadgeClass}"
+                                      th:text="${o.statusLabel}">-</span>
+                            </td>
+                            <td class="action-col" onclick="event.stopPropagation()">
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        th:onclick="'openDetailPanel(' + ${o.id} + ')'">상세</button>
+                                <form th:if="${o.status.name() == 'ORDER_CREATED' or o.status.name() == 'INBOUND_PENDING'}"
+                                      th:action="@{/orders/{id}/delete(id=${o.id})}"
+                                      method="post" style="display:inline;"
+                                      onsubmit="return confirm('주문을 삭제하시겠습니까?')">
+                                    <button type="submit" class="btn btn-sm btn-danger">삭제</button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 페이지네이션 (status + keyword 파라미터 유지) -->
+            <div class="pagination-wrap" th:if="${orders.totalPages > 1}">
+                <div class="page-info"
+                     th:text="'전체 ' + ${orders.totalElements} + '건 / '
+                              + (${orders.number} + 1) + ' 페이지 / 총 '
+                              + ${orders.totalPages} + ' 페이지'"></div>
+                <div class="page-buttons">
+                    <a th:if="${!orders.first}"
+                       th:href="@{/orders(page=${orders.number - 1}, status=${currentStatus}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                       class="page-btn">&laquo; 이전</a>
+                    <th:block th:each="i : ${#numbers.sequence(0, orders.totalPages - 1)}">
+                        <a th:href="@{/orders(page=${i}, status=${currentStatus}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                           th:text="${i + 1}"
+                           th:classappend="${i == orders.number ? ' active' : ''}"
+                           class="page-btn"></a>
+                    </th:block>
+                    <a th:if="${!orders.last}"
+                       th:href="@{/orders(page=${orders.number + 1}, status=${currentStatus}, keyword=${keyword}, filterAccountId=${filterAccountId})}"
+                       class="page-btn">다음 &raquo;</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     오버레이 (패널 배경)
+     ══════════════════════════════════════════════════════ -->
+<div id="panelOverlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:199;"
+     onclick="closePanel()"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     우측 슬라이드 패널 (단건 등록 / 주문 상세 공용)
+     ══════════════════════════════════════════════════════ -->
+<div id="orderPanel"
+     style="position:fixed; right:0; top:0; height:100vh; width:460px; z-index:200;
+            background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,.18);
+            transform:translateX(100%); transition:transform .26s ease;
+            display:flex; flex-direction:column; overflow:hidden;">
+
+    <!-- 패널 헤더 -->
+    <div style="padding:14px 18px; border-bottom:1px solid var(--color-border); flex-shrink:0;
+                display:flex; align-items:center; justify-content:space-between;">
+        <span id="panelTitle" style="font-size:15px; font-weight:700;">주문 상세</span>
+        <button type="button" onclick="closePanel()"
+                style="background:none; border:none; cursor:pointer; font-size:20px;
+                       color:var(--color-muted); line-height:1;">&times;</button>
+    </div>
+
+    <!-- 패널 본문 -->
+    <div id="panelContent" style="flex:1; overflow-y:auto;"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     엑셀 일괄 등록 모달
+     ══════════════════════════════════════════════════════ -->
+<div id="bulkModalOverlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:400;
+            align-items:center; justify-content:center;"
+     onclick="closeBulkModal()">
+    <div style="background:#fff; border-radius:var(--radius,8px);
+                box-shadow:0 20px 60px rgba(0,0,0,.25);
+                width:500px; max-height:85vh; display:flex; flex-direction:column;"
+         onclick="event.stopPropagation()">
+
+        <!-- 모달 헤더 -->
+        <div style="padding:16px 20px; border-bottom:1px solid var(--color-border);
+                    display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+            <span style="font-size:15px; font-weight:700;">📂 엑셀 일괄 주문 등록</span>
+            <button onclick="closeBulkModal()"
+                    style="background:none; border:none; cursor:pointer; font-size:20px;
+                           color:var(--color-muted); line-height:1;">&times;</button>
+        </div>
+
+        <!-- 모달 본문 -->
+        <div style="padding:20px; flex:1; overflow-y:auto;">
+            <form id="bulkUploadForm" th:action="@{/orders/bulk-upload}"
+                  method="post" enctype="multipart/form-data">
+
+                <!-- ADMIN 전용: 고객사 선택 -->
+                <div th:if="${accounts != null}" class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">고객사 <span class="required">*</span></label>
+                    <div th:if="${#lists.isEmpty(accounts)}"
+                         style="padding:10px; background:#fef3c7; border-radius:6px; font-size:13px; color:#92400e;">
+                        승인된 고객사가 없습니다.
+                    </div>
+                    <select th:unless="${#lists.isEmpty(accounts)}"
+                            name="accountId" class="form-select" required>
+                        <option value="">— 고객사 선택 —</option>
+                        <option th:each="acc : ${accounts}"
+                                th:value="${acc.id}"
+                                th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                           ? acc.companyName + ' (' + acc.username + ')'
+                                           : acc.username}"></option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:6px;">
+                    <label class="form-label">엑셀 파일 (.xlsx / .xls) <span class="required">*</span></label>
+                    <input type="file" name="file" accept=".xlsx,.xls"
+                           class="form-input" required id="bulkFileInput"/>
+                    <p style="font-size:11px; color:var(--color-muted); margin-top:5px;">
+                        열 순서: A=고객명 &nbsp;|&nbsp; B=SKU &nbsp;|&nbsp; C=수량 &nbsp;(1행: 헤더)
+                    </p>
+                </div>
+            </form>
+
+            <!-- 처리 결과 -->
+            <div id="bulkResult" style="display:none; margin-top:14px;"></div>
+        </div>
+
+        <!-- 모달 푸터 -->
+        <div style="padding:14px 20px; border-top:1px solid var(--color-border);
+                    display:flex; justify-content:flex-end; gap:8px; flex-shrink:0;">
+            <button type="button" class="btn btn-outline" onclick="closeBulkModal()">취소</button>
+            <button type="button" class="btn btn-primary" id="bulkSubmitBtn"
+                    onclick="submitBulkUpload()">등록 처리</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     주문 생성 폼 템플릿 (패널에 innerHTML로 삽입)
+     th:action 으로 CSRF 토큰 자동 포함
+     ══════════════════════════════════════════════════════ -->
+<div id="createFormTpl" style="display:none;">
+    <div style="padding:16px;">
+        <form th:action="@{/orders}" method="post" id="createOrderForm">
+
+            <!-- ADMIN 전용: 고객사 선택 -->
+            <div th:if="${accounts != null}" class="form-group" style="margin-bottom:12px;">
+                <label class="form-label" style="font-size:12px;">고객사 <span class="required">*</span></label>
+                <div th:if="${#lists.isEmpty(accounts)}"
+                     style="padding:8px; background:#fef3c7; border-radius:6px; font-size:12px; color:#92400e;">
+                    승인된 고객사가 없습니다.
+                </div>
+                <select th:unless="${#lists.isEmpty(accounts)}"
+                        name="accountId" class="form-select" id="createAccSel"
+                        onchange="onCreateAccChange()" required>
+                    <option value="">— 고객사 선택 —</option>
+                    <option th:each="acc : ${accounts}"
+                            th:value="${acc.id}"
+                            th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                       ? acc.companyName + ' (' + acc.username + ')'
+                                       : acc.username}"></option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px;">
+                <label class="form-label" style="font-size:12px;">고객명 <span class="required">*</span></label>
+                <input type="text" name="customerName" class="form-input"
+                       required placeholder="고객명을 입력하세요"/>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label" style="font-size:12px;">주문 상품 <span class="required">*</span></label>
+                <button type="button" class="btn btn-sm btn-secondary"
+                        onclick="addCreateItem()" style="margin-bottom:8px;">+ 상품 추가</button>
+                <div id="createItemsBox">
+                    <!-- JS addCreateItem() 으로 첫 행 생성 -->
+                </div>
+            </div>
+
+            <div style="display:flex; gap:8px;">
+                <button type="submit" class="btn btn-primary" style="flex:1;">주문 생성</button>
+                <button type="button" class="btn btn-outline" onclick="closePanel()">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 상태 변경 / 삭제용 숨김 폼 (th:action → CSRF 자동 포함) -->
+<form id="orderActionForm" th:action="@{/orders}" method="post" style="display:none;"></form>
+
+<!-- ══ 보류 사유 입력 모달 (상세 패널에서 사용) ══ -->
+<div id="detailHoldModal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+            z-index:500; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:12px; padding:28px 24px; width:420px;
+                max-width:90vw; box-shadow:0 8px 32px rgba(0,0,0,.18);"
+         onclick="event.stopPropagation()">
+        <div style="font-size:15px; font-weight:700; color:#1e293b; margin-bottom:6px;"
+             id="detailHoldModalTitle">보류</div>
+        <div style="font-size:13px; color:#64748b; margin-bottom:16px;">보류 사유를 입력하세요.</div>
+        <form id="detailHoldModalForm" method="post">
+            <textarea name="holdReason" id="detailHoldReasonInput"
+                      class="form-input"
+                      style="width:100%; height:90px; resize:vertical; font-size:13px;"
+                      placeholder="보류 사유 입력 (선택 사항)"></textarea>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
+                <button type="button" class="btn btn-outline" onclick="closeDetailHoldModal()">취소</button>
+                <button type="submit" class="btn btn-danger" id="detailHoldModalBtn">보류 처리</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     인라인 데이터 (products JSON)
+     ══════════════════════════════════════════════════════ -->
+<script th:inline="javascript">
+/*<![CDATA[*/
+const ALL_PRODUCTS = /*[[${products}]]*/ [];
+/*]]>*/
+</script>
+<!-- 계정 데이터: DOM 기반 자동완성으로 대체 (별도 JS 배열 불필요) -->
+
+<!-- ══════════════════════════════════════════════════════
+     스타일
+     ══════════════════════════════════════════════════════ -->
+<style>
+/* 패널 열림 */
+#orderPanel.open { transform: translateX(0) !important; }
+
+/* 수직 진행 상태 */
+.flow-v { display:flex; flex-direction:column; }
+.flow-v-step { display:flex; align-items:center; gap:10px; padding:5px 0; position:relative; }
+.flow-v-step:not(:last-child)::after {
+    content:''; position:absolute; left:6px; top:20px;
+    height:calc(100% - 2px); width:2px;
+    background:var(--color-border,#e2e8f0);
+}
+.flow-v-dot {
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid var(--color-border,#cbd5e1);
+    background:#fff; flex-shrink:0; z-index:1;
+}
+.flow-v-label { font-size:12px; color:var(--color-muted,#94a3b8); }
+.flow-v-step.done  .flow-v-dot   { background:var(--color-success,#22c55e); border-color:var(--color-success,#22c55e); }
+.flow-v-step.done  .flow-v-label { color:var(--color-success,#22c55e); }
+.flow-v-step.cur   .flow-v-dot   { background:var(--color-primary,#3b82f6); border-color:var(--color-primary,#3b82f6); }
+.flow-v-step.cur   .flow-v-label { color:var(--color-primary,#3b82f6); font-weight:700; }
+.flow-v-step.hold  .flow-v-dot   { background:#f59e0b; border-color:#f59e0b; }
+.flow-v-step.hold  .flow-v-label { color:#b45309; font-weight:700; }
+
+/* 주문 항목 행 */
+.create-item-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+.create-item-row select { flex:1; }
+.create-item-row .qty-input { width:80px; }
+</style>
+
+<!-- ══════════════════════════════════════════════════════
+     스크립트
+     ══════════════════════════════════════════════════════ -->
+<script>
+/* ── 공통 ── */
+const STATUS_LABELS = {
+    ORDER_CREATED:      '주문 생성',
+    INBOUND_PENDING:    '입고 대기',
+    INBOUND_HOLD:       '입고 보류',
+    INBOUND_COMPLETED:  '입고 완료',
+    OUTBOUND_PENDING:   '출고 대기',
+    OUTBOUND_HOLD:      '출고 보류',
+    OUTBOUND_COMPLETED: '출고 완료',
+    ORDER_HOLD:         '주문 보류',
+    READY_TO_SHIP:      '출고 준비',
+    SHIPPED:            '출하 완료'
+};
+/* 메인 진행 단계 (진행 상태 표시에 사용) */
+const STATUS_ORDER = ['INBOUND_PENDING','INBOUND_COMPLETED','OUTBOUND_PENDING','OUTBOUND_COMPLETED'];
+const BADGE_CLASS  = {
+    ORDER_CREATED:      'badge-created',
+    INBOUND_PENDING:    'badge-inbound-pending',
+    INBOUND_HOLD:       'badge-inbound-hold',
+    INBOUND_COMPLETED:  'badge-inbound-done',
+    OUTBOUND_PENDING:   'badge-outbound-pending',
+    OUTBOUND_HOLD:      'badge-outbound-hold',
+    OUTBOUND_COMPLETED: 'badge-outbound-done',
+    ORDER_HOLD:         'badge-order-hold',
+    READY_TO_SHIP:      'badge-ready-to-ship',
+    SHIPPED:            'badge-shipped'
+};
+
+function escH(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── 패널 열기 / 닫기 ── */
+function openPanel(title) {
+    document.getElementById('panelTitle').textContent = title;
+    document.getElementById('orderPanel').classList.add('open');
+    document.getElementById('panelOverlay').style.display = 'block';
+}
+function closePanel() {
+    document.getElementById('orderPanel').classList.remove('open');
+    document.getElementById('panelOverlay').style.display = 'none';
+    document.getElementById('panelContent').innerHTML = '';
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        if (document.getElementById('detailHoldModal').style.display !== 'none') closeDetailHoldModal();
+        else if (document.getElementById('bulkModalOverlay').style.display !== 'none') closeBulkModal();
+        else closePanel();
+    }
+});
+
+/* ═══════════════════════════════════════════════════════
+   주문 상세 패널
+   ═══════════════════════════════════════════════════════ */
+async function openDetailPanel(id) {
+    openPanel('주문 상세');
+    document.getElementById('panelContent').innerHTML =
+        '<div style="padding:48px;text-align:center;color:var(--color-muted);">불러오는 중…</div>';
+    try {
+        const r = await fetch('/orders/' + id + '/api');
+        if (!r.ok) throw new Error('조회 실패');
+        renderDetail(await r.json());
+    } catch(e) {
+        document.getElementById('panelContent').innerHTML =
+            '<div style="padding:20px;color:#dc2626;">' + escH(e.message) + '</div>';
+    }
+}
+
+function renderDetail(o) {
+    const s = o.status;
+
+    /* ── 진행 상태 흐름 매핑 ──
+       홀드 상태는 해당 단계에 머무르는 것으로 표시
+       ORDER_HOLD는 prevStatus 기준 */
+    const FLOW_POS = {
+        ORDER_CREATED: -1, INBOUND_PENDING: 0, INBOUND_HOLD: 0,
+        INBOUND_COMPLETED: 1,
+        OUTBOUND_PENDING: 2, OUTBOUND_HOLD: 2,
+        OUTBOUND_COMPLETED: 3, SHIPPED: 4,
+        READY_TO_SHIP: 1
+    };
+    let curPos;
+    if (s === 'ORDER_HOLD') {
+        curPos = (o.prevStatus && FLOW_POS[o.prevStatus] !== undefined) ? FLOW_POS[o.prevStatus] : 0;
+    } else {
+        curPos = FLOW_POS[s] !== undefined ? FLOW_POS[s] : 0;
+    }
+
+    const isHoldState = ['INBOUND_HOLD','OUTBOUND_HOLD','ORDER_HOLD'].includes(s);
+
+    /* 수직 진행 상태 */
+    const flowHtml = STATUS_ORDER.map((step, i) => {
+        let cls = '';
+        if (i < curPos) cls = 'done';
+        else if (i === curPos) cls = isHoldState ? 'hold' : 'cur';
+        return `<div class="flow-v-step ${cls}">
+                    <div class="flow-v-dot"></div>
+                    <div class="flow-v-label">${STATUS_LABELS[step]}</div>
+                </div>`;
+    }).join('');
+
+    /* ── 보류 사유 표시 ── */
+    let holdReasonHtml = '';
+    if (isHoldState && o.holdReason) {
+        holdReasonHtml = `
+            <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;
+                        padding:10px 12px;margin-bottom:16px;font-size:12px;color:#92400e;">
+                <div style="font-weight:700;margin-bottom:2px;">보류 사유</div>
+                <div>${escH(o.holdReason)}</div>
+            </div>`;
+    }
+
+    /* ── 액션 버튼 ── */
+    let btnHtml = '';
+
+    if (s === 'OUTBOUND_COMPLETED' || s === 'SHIPPED') {
+        /* 종료 상태 — 버튼 없음 */
+        btnHtml = `<span class="badge ${BADGE_CLASS[s]}">${STATUS_LABELS[s]}</span>`;
+
+    } else if (s === 'ORDER_HOLD') {
+        /* 주문 보류 → 해제만 */
+        btnHtml = `<button class="btn btn-primary"
+                           onclick="submitAction('/orders/${o.id}/resume')">주문 보류 해제</button>`;
+
+    } else if (s === 'INBOUND_HOLD') {
+        btnHtml = `
+            <button class="btn btn-secondary"
+                    onclick="submitAction('/inbound/${o.id}/resume')">입고 보류 해제</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('주문 보류','/orders/${o.id}/hold')">주문 보류</button>`;
+
+    } else if (s === 'OUTBOUND_HOLD') {
+        btnHtml = `
+            <button class="btn btn-secondary"
+                    onclick="submitAction('/outbound/${o.id}/resume')">출고 보류 해제</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('주문 보류','/orders/${o.id}/hold')">주문 보류</button>`;
+
+    } else if (s === 'INBOUND_PENDING') {
+        btnHtml = `
+            <button class="btn btn-primary"
+                    onclick="submitAction('/inbound/${o.id}/complete')">입고 완료</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('입고 보류','/inbound/${o.id}/hold')">입고 보류</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('주문 보류','/orders/${o.id}/hold')">주문 보류</button>
+            <button class="btn btn-sm btn-danger"
+                    onclick="deleteOrder(${o.id})">삭제</button>`;
+
+    } else if (s === 'INBOUND_COMPLETED') {
+        btnHtml = `
+            <button class="btn btn-primary"
+                    onclick="submitAction('/outbound/${o.id}/start')">출고 대기 전환</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('주문 보류','/orders/${o.id}/hold')">주문 보류</button>`;
+
+    } else if (s === 'OUTBOUND_PENDING') {
+        btnHtml = `
+            <button class="btn btn-primary"
+                    onclick="submitAction('/outbound/${o.id}/complete')">출고 완료</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('출고 보류','/outbound/${o.id}/hold')">출고 보류</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('주문 보류','/orders/${o.id}/hold')">주문 보류</button>`;
+
+    } else if (s === 'ORDER_CREATED') {
+        /* 이전 버전 호환 */
+        btnHtml = `
+            <button class="btn btn-primary"
+                    onclick="submitAction('/inbound/${o.id}/start')">입고 시작</button>
+            <button class="btn btn-sm btn-danger"
+                    onclick="deleteOrder(${o.id})">삭제</button>`;
+
+    } else if (s === 'READY_TO_SHIP') {
+        /* 이전 버전 호환 */
+        btnHtml = `
+            <button class="btn btn-primary"
+                    onclick="submitAction('/outbound/${o.id}/start')">출고 대기 전환</button>
+            <button class="btn btn-sm btn-outline"
+                    onclick="openDetailHoldModal('주문 보류','/orders/${o.id}/hold')">주문 보류</button>`;
+    }
+
+    /* ── 주문 항목 ── */
+    const itemRows = (o.items || []).map(it =>
+        `<tr><td><code>${escH(it.productSku)}</code></td>
+             <td>${escH(it.productName)}</td>
+             <td style="text-align:right;">${it.quantity}</td></tr>`
+    ).join('');
+
+    document.getElementById('panelContent').innerHTML = `
+        <div style="padding:16px;">
+            <!-- 기본 정보 -->
+            <div style="display:grid;grid-template-columns:72px 1fr;row-gap:8px;
+                        font-size:13px;margin-bottom:16px;padding-bottom:16px;
+                        border-bottom:1px solid var(--color-border);">
+                <span style="color:var(--color-muted);">주문번호</span>
+                <span style="font-weight:700;">${escH(o.orderNo || '#'+o.id)}</span>
+                <span style="color:var(--color-muted);">고객명</span>
+                <span>${escH(o.customerName)}</span>
+                <span style="color:var(--color-muted);">상태</span>
+                <span class="badge ${BADGE_CLASS[s] || ''}">${STATUS_LABELS[s] || s}</span>
+            </div>
+
+            ${holdReasonHtml}
+
+            <!-- 진행 상태 (세로) -->
+            <div style="font-size:11px;font-weight:700;color:var(--color-muted);
+                        text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">진행 상태</div>
+            <div class="flow-v" style="margin-bottom:16px;padding-bottom:16px;
+                                       border-bottom:1px solid var(--color-border);">
+                ${flowHtml}
+            </div>
+
+            <!-- 주문 항목 -->
+            <div style="font-size:11px;font-weight:700;color:var(--color-muted);
+                        text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">주문 항목</div>
+            <table class="data-table" style="font-size:12px;margin-bottom:16px;">
+                <thead><tr><th>SKU</th><th>상품명</th><th style="text-align:right;">수량</th></tr></thead>
+                <tbody>${itemRows || '<tr><td colspan="3" class="text-center text-muted">항목 없음</td></tr>'}</tbody>
+            </table>
+
+            <!-- 액션 -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">${btnHtml}</div>
+        </div>`;
+}
+
+/* 상태 변경 / 삭제 폼 제출 */
+function submitAction(url) {
+    const f = document.getElementById('orderActionForm');
+    f.action = url;
+    f.submit();
+}
+function deleteOrder(id) {
+    if (!confirm('주문을 삭제하시겠습니까?')) return;
+    submitAction('/orders/' + id + '/delete');
+}
+
+/* ══ 보류 사유 모달 ══ */
+function openDetailHoldModal(title, actionUrl) {
+    document.getElementById('detailHoldModalTitle').textContent = title;
+    document.getElementById('detailHoldModalBtn').textContent   = title + ' 처리';
+    document.getElementById('detailHoldReasonInput').value = '';
+    document.getElementById('detailHoldModalForm').action  = actionUrl;
+    document.getElementById('detailHoldModal').style.display = 'flex';
+}
+function closeDetailHoldModal() {
+    document.getElementById('detailHoldModal').style.display = 'none';
+}
+document.getElementById('detailHoldModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDetailHoldModal();
+});
+
+/* ═══════════════════════════════════════════════════════
+   주문 단건 등록 패널
+   ═══════════════════════════════════════════════════════ */
+let _createAccId = null;
+let _createItemIdx = 0;
+
+function openCreatePanel() {
+    openPanel('주문 생성');
+    // 템플릿 HTML 복사
+    const tpl = document.getElementById('createFormTpl').innerHTML;
+    document.getElementById('panelContent').innerHTML = tpl;
+    // 상품 첫 행 추가
+    _createItemIdx = 0;
+    _createAccId = null;
+    addCreateItem();
+}
+
+function buildProductOpts(accId) {
+    let html = '<option value="">상품 선택</option>';
+    ALL_PRODUCTS.forEach(p => {
+        const hide = (accId && p.accountId && String(p.accountId) !== String(accId))
+                     ? 'style="display:none;"' : '';
+        html += `<option value="${p.id}" data-acc="${p.accountId||''}" ${hide}>${escH(p.sku)} - ${escH(p.name)}</option>`;
+    });
+    return html;
+}
+
+function onCreateAccChange() {
+    const sel = document.querySelector('#panelContent #createAccSel');
+    _createAccId = sel ? sel.value : null;
+
+    /* 고객명 자동완성: select 의 선택된 option 텍스트에서 추출 */
+    const nameInput = document.querySelector('#panelContent input[name="customerName"]');
+    if (nameInput && sel && sel.selectedIndex > 0) {
+        const optText = sel.options[sel.selectedIndex].text;
+        // 옵션 형식: "회사명 (username)" → 회사명만 추출, 또는 username
+        nameInput.value = optText.includes(' (') ? optText.split(' (')[0].trim() : optText.trim();
+    }
+
+    /* 고객사별 상품 필터링 */
+    document.querySelectorAll('#panelContent .create-item-row select').forEach(s => {
+        const cur = s.value;
+        s.querySelectorAll('option[data-acc]').forEach(opt => {
+            opt.style.display = (!_createAccId || String(opt.dataset.acc) === String(_createAccId)) ? '' : 'none';
+        });
+        const vis = Array.from(s.querySelectorAll('option[data-acc]')).filter(o => o.style.display !== 'none');
+        if (cur && !vis.find(o => o.value === cur)) s.value = '';
+    });
+}
+
+function addCreateItem() {
+    const idx = _createItemIdx++;
+    const row = document.createElement('div');
+    row.className = 'create-item-row';
+    row.id = 'ci-' + idx;
+    row.innerHTML = `
+        <select name="items[${idx}].productId" class="form-select" required>
+            ${buildProductOpts(_createAccId)}
+        </select>
+        <input type="number" name="items[${idx}].quantity"
+               class="form-input qty-input" placeholder="수량" min="1" required/>
+        <button type="button" class="btn btn-sm btn-danger"
+                onclick="removeCreateItem(${idx})">제거</button>`;
+    document.getElementById('createItemsBox').appendChild(row);
+}
+
+function removeCreateItem(idx) {
+    const box = document.getElementById('createItemsBox');
+    if (box.children.length <= 1) { alert('최소 1개의 상품이 필요합니다.'); return; }
+    document.getElementById('ci-' + idx)?.remove();
+    reindexCreate();
+}
+
+function reindexCreate() {
+    document.querySelectorAll('#createItemsBox .create-item-row').forEach((row, i) => {
+        row.id = 'ci-' + i;
+        const sel = row.querySelector('select');
+        const inp = row.querySelector('input');
+        const btn = row.querySelector('button');
+        if (sel) sel.name = `items[${i}].productId`;
+        if (inp) inp.name = `items[${i}].quantity`;
+        if (btn) btn.setAttribute('onclick', `removeCreateItem(${i})`);
+    });
+    _createItemIdx = document.querySelectorAll('#createItemsBox .create-item-row').length;
+}
+
+/* ═══════════════════════════════════════════════════════
+   엑셀 일괄 등록 모달
+   ═══════════════════════════════════════════════════════ */
+function openBulkModal() {
+    document.getElementById('bulkModalOverlay').style.display = 'flex';
+    document.getElementById('bulkResult').style.display = 'none';
+    document.getElementById('bulkUploadForm').reset();
+    document.getElementById('bulkSubmitBtn').disabled = false;
+    document.getElementById('bulkSubmitBtn').textContent = '등록 처리';
+}
+function closeBulkModal() {
+    document.getElementById('bulkModalOverlay').style.display = 'none';
+}
+
+async function submitBulkUpload() {
+    const fileInput = document.getElementById('bulkFileInput');
+    if (!fileInput.files.length) { alert('파일을 선택해주세요.'); return; }
+
+    const btn = document.getElementById('bulkSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '처리 중…';
+
+    try {
+        const fd = new FormData(document.getElementById('bulkUploadForm'));
+        const resp = await fetch('/orders/bulk-upload', { method: 'POST', body: fd });
+        const result = await resp.json();
+        showBulkResult(result);
+    } catch (e) {
+        showBulkResult({ successCount: 0, failureCount: 1, errors: [e.message] });
+    }
+    btn.disabled = false;
+    btn.textContent = '등록 처리';
+}
+
+function showBulkResult(r) {
+    const el = document.getElementById('bulkResult');
+    const ok  = r.successCount > 0;
+    const bg  = ok ? '#f0fdf4' : '#fef2f2';
+    const bdr = ok ? '#86efac' : '#fca5a5';
+
+    let html = `<div style="font-size:13px;font-weight:700;margin-bottom:6px;">처리 결과</div>
+                <div style="font-size:13px;">
+                    ✅ 성공: <strong>${r.successCount}건</strong>`;
+    if (r.failureCount > 0) html += ` &nbsp;❌ 실패: <strong>${r.failureCount}건</strong>`;
+    html += '</div>';
+    if (r.errors && r.errors.length) {
+        html += '<ul style="margin:8px 0 0;padding-left:16px;font-size:12px;color:#dc2626;">';
+        r.errors.forEach(e => { html += `<li>${escH(e)}</li>`; });
+        html += '</ul>';
+    }
+
+    el.style.cssText = `background:${bg};border:1px solid ${bdr};border-radius:6px;padding:12px;`;
+    el.innerHTML = html;
+    el.style.display = 'block';
+
+    // 성공이 1건 이상이면 2초 후 페이지 새로고침
+    if (ok) setTimeout(() => { closeBulkModal(); location.reload(); }, 2000);
+}
+</script>
+</body>
+</html>

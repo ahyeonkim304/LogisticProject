@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>로케이션 관리 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header">
+        <h1 class="page-title">로케이션 관리</h1>
+        <button class="btn btn-primary" onclick="openPanel('create')">+ 로케이션 등록</button>
+      </header>
+
+      <div class="tab-bar" style="margin-bottom:16px">
+        <button class="tab-btn active" onclick="setTab(null,this)">전체</button>
+        <button class="tab-btn" onclick="setTab(true,this)">활성</button>
+        <button class="tab-btn" onclick="setTab(false,this)">비활성</button>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input id="filter-kw" class="form-control" placeholder="코드 또는 이름 검색" style="width:260px">
+            <button class="btn btn-secondary" onclick="renderRows()">검색</button>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>코드</th><th>이름</th><th>유형</th><th>상위</th><th>상태</th><th>관리</th></tr></thead>
+            <tbody id="loc-body"><tr><td colspan="6" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 드로어 배경 -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closePanel()"></div>
+
+<!-- 등록 / 수정 드로어 -->
+<div class="drawer" id="side-panel">
+  <div class="drawer-header">
+    <h3 id="panel-title">로케이션 등록</h3>
+    <button class="drawer-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group">
+      <label class="form-label">코드 <span class="text-danger">*</span></label>
+      <input id="p-code" class="form-control" placeholder="예: A-01-01">
+    </div>
+    <div class="form-group">
+      <label class="form-label">이름</label>
+      <input id="p-name" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="form-label">유형 <span class="text-danger">*</span></label>
+      <select id="p-type" class="form-control"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">상위 로케이션</label>
+      <select id="p-parent" class="form-control"><option value="">없음 (최상위)</option></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">설명</label>
+      <textarea id="p-desc" class="form-control" rows="3"></textarea>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-secondary" onclick="closePanel()">취소</button>
+    <button class="btn btn-primary" onclick="submitPanel()">저장</button>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+let meta = { locationTypes: [], parentCandidates: [] };
+let allRows = [], activeFilter = null, editingId = null;
+
+function setTab(filter, el) {
+  activeFilter = filter;
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderRows();
+}
+
+async function init() {
+  try {
+    meta = await apiFetch('GET', '/locations/meta');
+    document.getElementById('p-type').innerHTML =
+      meta.locationTypes.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  } catch (e) { /* meta 로딩 실패 무시 */ }
+  load();
+}
+
+async function load() {
+  try {
+    const data = await apiFetch('GET', '/locations');
+    allRows = Array.isArray(data) ? data : (data.content ?? []);
+    renderRows();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function renderRows() {
+  const kw = document.getElementById('filter-kw').value.trim().toLowerCase();
+  let rows = allRows;
+  if (activeFilter !== null) rows = rows.filter(r => r.active === activeFilter);
+  if (kw) rows = rows.filter(r =>
+    (r.code || '').toLowerCase().includes(kw) || (r.name || '').toLowerCase().includes(kw));
+  document.getElementById('loc-body').innerHTML = !rows.length
+    ? '<tr><td colspan="6" class="text-center text-muted">로케이션이 없습니다.</td></tr>'
+    : rows.map(r => `<tr>
+        <td><code>${escHtml(r.code)}</code></td>
+        <td>${escHtml(r.name) || '<span class="text-muted">-</span>'}</td>
+        <td><span class="badge badge-blue">${escHtml(r.locationType)}</span></td>
+        <td>${r.parentName ? escHtml(r.parentName) : '<span class="text-muted">최상위</span>'}</td>
+        <td>
+          <button class="btn btn-xs ${r.active ? 'btn-success' : 'btn-secondary'}" onclick="toggle(${r.id})">
+            ${r.active ? '활성' : '비활성'}
+          </button>
+        </td>
+        <td>
+          <button class="btn btn-xs btn-secondary" onclick='openPanel("edit",${JSON.stringify(r)})'>수정</button>
+          <button class="btn btn-xs btn-danger" onclick="del(${r.id})">삭제</button>
+        </td>
+      </tr>`).join('');
+}
+
+function openPanel(mode, r) {
+  editingId = mode === 'edit' ? r.id : null;
+  document.getElementById('panel-title').textContent = mode === 'edit' ? '로케이션 수정' : '로케이션 등록';
+  if (mode === 'edit') {
+    document.getElementById('p-code').value = r.code || '';
+    document.getElementById('p-name').value = r.name || '';
+    document.getElementById('p-desc').value = r.description || '';
+    if (r.locationType) document.getElementById('p-type').value = r.locationType;
+    populateParents(r.parentId);
+  } else {
+    ['p-code','p-name','p-desc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('p-type').selectedIndex = 0;
+    populateParents(null);
+  }
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('open');
+  editingId = null;
+}
+
+function populateParents(selectedId) {
+  document.getElementById('p-parent').innerHTML =
+    '<option value="">없음 (최상위)</option>' +
+    (meta.parentCandidates || []).map(p =>
+      `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${escHtml(p.code)} - ${escHtml(p.name||'')}</option>`
+    ).join('');
+}
+
+async function submitPanel() {
+  const body = {
+    code:         document.getElementById('p-code').value.trim(),
+    name:         document.getElementById('p-name').value.trim(),
+    type:         document.getElementById('p-type').value,
+    parentId:     document.getElementById('p-parent').value || null,
+    description:  document.getElementById('p-desc').value.trim()
+  };
+  if (!body.code) { showToast('코드는 필수입니다.', 'error'); return; }
+  try {
+    if (editingId) { await apiFetch('PUT', `/locations/${editingId}`, body); showToast('수정되었습니다.'); }
+    else           { await apiFetch('POST', '/locations', body); showToast('등록되었습니다.'); }
+    closePanel(); load();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function toggle(id) {
+  try { await apiFetch('PATCH', `/locations/${id}/toggle`); load(); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+async function del(id) {
+  if (!confirm('이 로케이션을 삭제하시겠습니까?')) return;
+  try { await apiFetch('DELETE', `/locations/${id}`); showToast('삭제되었습니다.'); load(); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+document.getElementById('filter-kw').addEventListener('keydown', e => { if (e.key === 'Enter') renderRows(); });
+init();
+</script>
+</body>
+</html>

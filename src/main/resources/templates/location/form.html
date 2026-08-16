@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="fragments/layout :: head('로케이션 등록/수정')"></head>
+<body>
+<div class="layout">
+    <nav th:replace="fragments/layout :: sidebar"></nav>
+    <main class="main-content">
+
+        <div class="page-header">
+            <h1 class="page-title" th:text="${locationId != null ? '로케이션 수정' : '로케이션 등록'}">로케이션</h1>
+            <a th:href="@{/locations}" class="btn btn-secondary">← 목록</a>
+        </div>
+
+        <div class="content-body">
+            <div th:replace="fragments/layout :: flash"></div>
+
+            <div class="card form-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span th:text="${locationId != null ? '로케이션 정보 수정' : '새 로케이션 등록'}"></span>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <form th:action="${locationId != null ? '/locations/' + locationId : '/locations'}"
+                          th:object="${dto}" method="post">
+
+                        <!-- ADMIN 전용: 고객사 선택 -->
+                        <div class="form-group" th:if="${accounts != null}">
+                            <label class="form-label">
+                                고객사 <span class="required">*</span>
+                            </label>
+                            <select name="accountId" class="form-select" th:field="*{accountId}" required>
+                                <option value="">-- 고객사 선택 --</option>
+                                <option th:each="acc : ${accounts}"
+                                        th:value="${acc.id}"
+                                        th:text="${(acc.companyName != null and !#strings.isEmpty(acc.companyName)) ? acc.companyName : acc.username}">
+                                </option>
+                            </select>
+                            <p class="field-error"
+                               th:if="${#fields.hasErrors('accountId')}"
+                               th:errors="*{accountId}"></p>
+                        </div>
+
+                        <!-- 코드 -->
+                        <div class="form-group">
+                            <label for="code" class="form-label">
+                                코드 <span class="required">*</span>
+                                <span style="font-weight:400; color:#94a3b8; font-size:12px; margin-left:4px;">자동으로 대문자 변환됩니다</span>
+                            </label>
+                            <input type="text" id="code" th:field="*{code}"
+                                   class="form-input"
+                                   th:classappend="${#fields.hasErrors('code')} ? ' input-error'"
+                                   placeholder="예: BIN-A1-01"
+                                   oninput="this.value = this.value.toUpperCase()"
+                                   autocomplete="off"/>
+                            <p class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></p>
+                        </div>
+
+                        <!-- 이름 -->
+                        <div class="form-group">
+                            <label for="name" class="form-label">이름</label>
+                            <input type="text" id="name" th:field="*{name}"
+                                   class="form-input"
+                                   placeholder="예: A1-01 빈"/>
+                        </div>
+
+                        <!-- 유형 -->
+                        <div class="form-group">
+                            <label for="type" class="form-label">
+                                유형 <span class="required">*</span>
+                            </label>
+                            <select id="type" th:field="*{type}"
+                                    class="form-select"
+                                    th:classappend="${#fields.hasErrors('type')} ? ' input-error'">
+                                <option value="">-- 유형 선택 --</option>
+                                <option th:each="t : ${locationTypes}"
+                                        th:value="${t.name()}"
+                                        th:text="${t.name() == 'WAREHOUSE' ? '🏭 창고 (WAREHOUSE)' :
+                                                   t.name() == 'ZONE'      ? '📐 존 (ZONE)' :
+                                                   t.name() == 'RACK'      ? '🗄 랙 (RACK)' :
+                                                                              '📦 빈 (BIN)'}">
+                                </option>
+                            </select>
+                            <p class="field-error" th:if="${#fields.hasErrors('type')}" th:errors="*{type}"></p>
+                        </div>
+
+                        <!-- 상위 로케이션 -->
+                        <div class="form-group">
+                            <label for="parentId" class="form-label">상위 로케이션</label>
+                            <select id="parentId" th:field="*{parentId}" class="form-select">
+                                <option value="">— 없음 (최상위)</option>
+                                <option th:each="p : ${parentCandidates}"
+                                        th:value="${p.id}"
+                                        th:text="${p.code + (p.name != null and !#strings.isEmpty(p.name) ? '  (' + p.name + ')' : '')}"
+                                        th:disabled="${locationId != null and p.id == locationId}">
+                                </option>
+                            </select>
+                            <p style="margin-top:4px; font-size:12px; color:#94a3b8;">BIN 유형은 상위 로케이션을 지정해야 합니다.</p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary"
+                                    th:text="${locationId != null ? '수정 완료' : '등록'}">등록</button>
+                            <a th:href="@{/locations}" class="btn btn-secondary">취소</a>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<style>
+.input-error {
+    border-color: var(--color-danger) !important;
+    box-shadow: 0 0 0 3px rgba(239,68,68,.1) !important;
+}
+</style>
+</body>
+</html>

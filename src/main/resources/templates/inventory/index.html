@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>재고 관리 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header">
+        <h1 class="page-title">재고 관리</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="openPanel('adjust')">± 재고 조정</button>
+          <button class="btn btn-primary" onclick="openPanel('add')">+ 재고 입력</button>
+        </div>
+      </header>
+
+      <div class="tab-bar" style="margin-bottom:16px">
+        <button class="tab-btn active" onclick="switchTab('list',this)">재고 목록</button>
+        <button class="tab-btn" onclick="switchTab('log',this)">변동 이력</button>
+      </div>
+
+      <!-- 재고 목록 카드 -->
+      <div id="inv-card" class="card">
+        <div class="card-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input id="filter-kw" class="form-control" placeholder="SKU 또는 상품명 검색" style="width:260px">
+            <button class="btn btn-secondary" onclick="load(0)">검색</button>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>SKU</th><th>상품명</th><th>총 재고</th><th>로케이션 수</th><th>최근 변동</th></tr></thead>
+            <tbody id="inv-body"><tr><td colspan="5" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+          <div id="pagination"></div>
+        </div>
+      </div>
+
+      <!-- 변동 이력 카드 -->
+      <div id="log-card" class="card" style="display:none">
+        <div class="card-header"><h2 class="card-title">최근 재고 변동 (20건)</h2></div>
+        <div class="card-body">
+          <table class="data-table">
+            <thead><tr><th>일시</th><th>SKU</th><th>상품명</th><th>유형</th><th>수량</th><th>참조</th></tr></thead>
+            <tbody id="log-body"><tr><td colspan="6" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 드로어 배경 -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closePanel()"></div>
+
+<!-- 재고 입력 / 조정 드로어 -->
+<div class="drawer" id="side-panel">
+  <div class="drawer-header">
+    <h3 id="panel-title">재고 입력</h3>
+    <button class="drawer-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group">
+      <label class="form-label">SKU <span class="text-danger">*</span></label>
+      <input id="p-sku" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="form-label" id="p-qty-label">수량 <span class="text-danger">*</span></label>
+      <input id="p-qty" class="form-control" type="number">
+    </div>
+    <div class="form-group" id="p-loc-group">
+      <label class="form-label">로케이션 ID</label>
+      <input id="p-loc" class="form-control" placeholder="선택사항">
+    </div>
+    <div class="form-group" id="p-memo-group">
+      <label class="form-label">메모</label>
+      <input id="p-memo" class="form-control">
+    </div>
+    <div class="form-group" id="p-reason-group" style="display:none">
+      <label class="form-label">사유 <span class="text-danger">*</span></label>
+      <input id="p-reason" class="form-control" placeholder="파손, 분실, 재검수 등">
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-secondary" onclick="closePanel()">취소</button>
+    <button class="btn btn-primary" id="panel-submit-btn" onclick="submitPanel()">입력</button>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+let currentPage = 0, panelMode = 'add';
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('inv-card').style.display = tab === 'list' ? '' : 'none';
+  document.getElementById('log-card').style.display = tab === 'log'  ? '' : 'none';
+}
+
+function openPanel(mode) {
+  panelMode = mode;
+  const isAdjust = mode === 'adjust';
+  document.getElementById('panel-title').textContent      = isAdjust ? '재고 조정' : '재고 입력';
+  document.getElementById('panel-submit-btn').textContent = isAdjust ? '조정' : '입력';
+  document.getElementById('p-qty-label').innerHTML        = (isAdjust ? '조정 수량 (음수=차감)' : '수량') + ' <span class="text-danger">*</span>';
+  document.getElementById('p-qty').min                    = isAdjust ? '' : '1';
+  document.getElementById('p-loc-group').style.display    = isAdjust ? 'none' : '';
+  document.getElementById('p-memo-group').style.display   = isAdjust ? 'none' : '';
+  document.getElementById('p-reason-group').style.display = isAdjust ? '' : 'none';
+  ['p-sku','p-qty','p-loc','p-memo','p-reason'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('open');
+}
+
+async function submitPanel() {
+  const sku = document.getElementById('p-sku').value.trim();
+  const qty = parseInt(document.getElementById('p-qty').value);
+  if (!sku || !qty) { showToast('SKU와 수량은 필수입니다.', 'error'); return; }
+  try {
+    if (panelMode === 'adjust') {
+      const reason = document.getElementById('p-reason').value.trim();
+      if (!reason) { showToast('사유를 입력해주세요.', 'error'); return; }
+      await apiFetch('POST', '/inventory/adjust', { productSku: sku, quantity: qty, reason });
+      showToast('재고가 조정되었습니다.');
+    } else {
+      const locationId = document.getElementById('p-loc').value ? parseInt(document.getElementById('p-loc').value) : null;
+      const memo       = document.getElementById('p-memo').value.trim();
+      await apiFetch('POST', '/inventory/add', { productSku: sku, quantity: qty, locationId, memo });
+      showToast('재고가 입력되었습니다.');
+    }
+    closePanel(); load(currentPage); loadLogs();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function load(page = 0) {
+  currentPage = page;
+  const kw = document.getElementById('filter-kw').value.trim();
+  try {
+    const data = await apiFetch('GET', `/inventory?page=${page}&size=20${kw ? '&keyword='+encodeURIComponent(kw) : ''}`);
+    const rows = data.content ?? [];
+    document.getElementById('inv-body').innerHTML = !rows.length
+      ? '<tr><td colspan="5" class="text-center text-muted">재고가 없습니다.</td></tr>'
+      : rows.map(r => `<tr>
+          <td><code>${escHtml(r.productSku)}</code></td>
+          <td>${escHtml(r.productName)}</td>
+          <td><strong>${r.totalQuantity}</strong></td>
+          <td>${r.locationCount ?? 0}</td>
+          <td>${fmtDate(r.lastUpdated)}</td>
+        </tr>`).join('');
+    renderPagination(document.getElementById('pagination'), data, load);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function loadLogs() {
+  try {
+    const logs = await apiFetch('GET', '/inventory/recent-logs?size=20');
+    document.getElementById('log-body').innerHTML = !(logs && logs.length)
+      ? '<tr><td colspan="6" class="text-center text-muted">로그가 없습니다.</td></tr>'
+      : logs.map(l => `<tr>
+          <td>${fmtDate(l.createdAt)}</td>
+          <td><code>${escHtml(l.productSku)}</code></td>
+          <td>${escHtml(l.productName)}</td>
+          <td><span class="badge">${escHtml(l.typeLabel || l.type)}</span></td>
+          <td>${l.quantity}</td>
+          <td>${l.referenceId ? escHtml(l.referenceType)+' #'+l.referenceId : '<span class="text-muted">직접 입력</span>'}</td>
+        </tr>`).join('');
+  } catch (e) { /* 로그 로딩 실패 무시 */ }
+}
+
+document.getElementById('filter-kw').addEventListener('keydown', e => { if (e.key === 'Enter') load(0); });
+load(); loadLogs();
+</script>
+</body>
+</html>

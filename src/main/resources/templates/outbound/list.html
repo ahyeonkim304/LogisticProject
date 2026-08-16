@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('출고 처리')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">출고 처리</h1>
+            <a th:href="@{/pallets}" class="btn btn-primary">🗂 팔레트 출고 →</a>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <!-- 탭 바 -->
+            <div class="tab-bar">
+                <a href="#" class="tab-item tab-active" id="tabPending"
+                   onclick="switchTab('pending'); return false;">
+                    출고 대기
+                    <span class="tab-count" th:text="${#lists.size(pendingOrders)}">0</span>
+                </a>
+                <a href="#" class="tab-item" id="tabHold"
+                   onclick="switchTab('hold'); return false;">
+                    출고 보류
+                    <span class="tab-count" th:text="${#lists.size(holdOrders)}">0</span>
+                </a>
+                <a href="#" class="tab-item" id="tabCompleted"
+                   onclick="switchTab('completed'); return false;">
+                    출고 완료
+                    <span class="tab-count" th:text="${#lists.size(completedOrders)}">0</span>
+                </a>
+            </div>
+
+            <!-- ── 탭 1: 출고 대기 (OUTBOUND_PENDING) ── -->
+            <div id="panePending">
+                <div class="card">
+                    <div class="card-body" style="padding:0;">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>주문번호</th>
+                                <th>고객명</th>
+                                <th>출고 항목</th>
+                                <th>처리</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(pendingOrders)}">
+                                <td colspan="4">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">🚚</div>
+                                        <div class="empty-state-title">출고 대기 주문이 없습니다</div>
+                                        <div class="empty-state-desc">입고 완료 후 출고 대기 전환된 주문이 표시됩니다.</div>
+                                        <a th:href="@{/inbound}" class="btn btn-sm btn-outline">입고 처리로 이동 →</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr th:each="o : ${pendingOrders}">
+                                <td>
+                                    <a th:href="@{/orders/{id}(id=${o.id})}"
+                                       th:text="${o.orderNo != null ? o.orderNo : '#' + o.id}"
+                                       class="link">-</a>
+                                </td>
+                                <td th:text="${o.customerName}">-</td>
+                                <td>
+                                    <ul class="item-list">
+                                        <li th:each="item : ${o.items}"
+                                            th:text="${item.productSku + ' × ' + item.quantity}">-</li>
+                                    </ul>
+                                </td>
+                                <td class="action-col">
+                                    <!-- 출고 완료 -->
+                                    <form th:action="@{/outbound/{id}/complete(id=${o.id})}" method="post"
+                                          style="display:inline;"
+                                          onsubmit="return confirm('출고 완료 처리하시겠습니까?\nFIFO 방식으로 재고가 차감됩니다.')">
+                                        <button type="submit" class="btn btn-sm btn-primary">출고 완료</button>
+                                    </form>
+                                    <!-- 출고 보류 -->
+                                    <button type="button" class="btn btn-sm btn-outline"
+                                            th:data-id="${o.id}"
+                                            onclick="openHoldModal(this.dataset.id)">출고 보류</button>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 탭 2: 출고 보류 (OUTBOUND_HOLD) ── -->
+            <div id="paneHold" style="display:none;">
+                <div class="card">
+                    <div class="card-body" style="padding:0;">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>주문번호</th>
+                                <th>고객명</th>
+                                <th>보류 사유</th>
+                                <th>처리</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(holdOrders)}">
+                                <td colspan="4">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">✅</div>
+                                        <div class="empty-state-title">출고 보류 주문이 없습니다</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr th:each="o : ${holdOrders}">
+                                <td>
+                                    <a th:href="@{/orders/{id}(id=${o.id})}"
+                                       th:text="${o.orderNo != null ? o.orderNo : '#' + o.id}"
+                                       class="link">-</a>
+                                </td>
+                                <td th:text="${o.customerName}">-</td>
+                                <td style="color:var(--color-muted); font-size:12px;"
+                                    th:text="${o.holdReason != null and !#strings.isEmpty(o.holdReason) ? o.holdReason : '-'}">-</td>
+                                <td class="action-col">
+                                    <form th:action="@{/outbound/{id}/resume(id=${o.id})}" method="post"
+                                          style="display:inline;"
+                                          onsubmit="return confirm('출고 보류를 해제하고 출고 대기 상태로 전환하시겠습니까?')">
+                                        <button type="submit" class="btn btn-sm btn-secondary">보류 해제</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 탭 3: 출고 완료 (OUTBOUND_COMPLETED) ── -->
+            <div id="paneCompleted" style="display:none;">
+                <div class="card">
+                    <div class="card-body" style="padding:0;">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>주문번호</th>
+                                <th>고객명</th>
+                                <th>상품 수</th>
+                                <th>총 수량</th>
+                                <th>상태</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(completedOrders)}">
+                                <td colspan="5">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">📋</div>
+                                        <div class="empty-state-title">출고 완료 주문이 없습니다</div>
+                                        <div class="empty-state-desc">출고 완료 처리된 주문이 이 목록에 표시됩니다.</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr th:each="o : ${completedOrders}">
+                                <td>
+                                    <a th:href="@{/orders/{id}(id=${o.id})}"
+                                       th:text="${o.orderNo != null ? o.orderNo : '#' + o.id}"
+                                       class="link">-</a>
+                                </td>
+                                <td th:text="${o.customerName}">-</td>
+                                <td th:text="${o.items.size()}">0</td>
+                                <td th:text="${#aggregates.sum(o.items.![quantity])}">0</td>
+                                <td>
+                                    <span class="badge badge-outbound-done">출고 완료</span>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /content-body -->
+    </div>
+</div>
+
+<!-- ══ 출고 보류 사유 입력 모달 ══ -->
+<div id="holdModal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+            z-index:500; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:12px; padding:28px 24px; width:420px;
+                max-width:90vw; box-shadow:0 8px 32px rgba(0,0,0,.18);"
+         onclick="event.stopPropagation()">
+        <div style="font-size:15px; font-weight:700; color:#1e293b; margin-bottom:6px;">출고 보류</div>
+        <div style="font-size:13px; color:#64748b; margin-bottom:16px;">보류 사유를 입력하세요.</div>
+        <form id="holdModalForm" method="post">
+            <textarea name="holdReason" id="holdReasonInput"
+                      class="form-input"
+                      style="width:100%; height:90px; resize:vertical; font-size:13px;"
+                      placeholder="보류 사유 입력 (선택 사항)"></textarea>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
+                <button type="button" class="btn btn-outline" onclick="closeHoldModal()">취소</button>
+                <button type="submit" class="btn btn-danger">출고 보류 처리</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const TAB_IDS = ['pending', 'hold', 'completed'];
+
+function switchTab(tab) {
+    TAB_IDS.forEach(function(t) {
+        var key = t.charAt(0).toUpperCase() + t.slice(1);
+        document.getElementById('pane' + key).style.display = (t === tab) ? 'block' : 'none';
+        document.getElementById('tab'  + key).classList.toggle('tab-active', t === tab);
+    });
+}
+
+function openHoldModal(orderId) {
+    document.getElementById('holdReasonInput').value = '';
+    document.getElementById('holdModalForm').action = '/outbound/' + orderId + '/hold';
+    document.getElementById('holdModal').style.display = 'flex';
+}
+function closeHoldModal() {
+    document.getElementById('holdModal').style.display = 'none';
+}
+document.getElementById('holdModal').addEventListener('click', function(e) {
+    if (e.target === this) closeHoldModal();
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeHoldModal();
+});
+</script>
+</body>
+</html>

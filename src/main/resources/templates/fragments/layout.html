@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+
+<!-- ===== HEAD FRAGMENT ===== -->
+<head th:fragment="head(title)">
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title th:text="${title} + ' - WMS'">WMS</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+    <script th:src="@{/js/common/layout.js}" defer></script>
+</head>
+
+<!-- ===== SIDEBAR FRAGMENT ===== -->
+<nav th:fragment="sidebar" class="sidebar">
+    <div class="sidebar-brand">
+        <span class="brand-icon">📦</span>
+        <span class="brand-text">WMS</span>
+    </div>
+    <ul class="sidebar-menu">
+
+        <!-- ── 운영 ── -->
+        <li class="nav-section">운영</li>
+        <li>
+            <a th:href="@{/}" th:classappend="${#httpServletRequest.requestURI == '/' ? ' active' : ''}">
+                <span class="menu-icon">🏠</span> 대시보드
+            </a>
+        </li>
+
+        <!-- ── 계정 (관리자 전용) ── -->
+        <li th:if="${session.user != null and session.user.admin}" class="nav-section">계정</li>
+        <li th:if="${session.user != null and session.user.admin}">
+            <a th:href="@{/admin/accounts}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/admin') ? ' active' : ''}">
+                <span class="menu-icon">👥</span> 계정 관리
+            </a>
+        </li>
+
+        <!-- ── 상품 ── -->
+        <li class="nav-section">상품</li>
+        <li>
+            <a th:href="@{/products}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/products') ? ' active' : ''}">
+                <span class="menu-icon">🛍</span> 상품 관리
+            </a>
+        </li>
+
+        <!-- ── 재고 ── -->
+        <li class="nav-section">재고</li>
+        <li class="menu-group">
+            <a th:href="@{/inventory}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/inventory') and !#httpServletRequest.requestURI.startsWith('/inventory/history') ? ' active' : ''}">
+                <span class="menu-icon">📦</span> 재고 관리
+            </a>
+            <a th:href="@{/inventory/history}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/inventory/history') ? ' active' : ''}"
+               class="menu-sub">
+                <span class="menu-icon" style="font-size:13px;">📋</span> 이력 조회
+            </a>
+        </li>
+        <li class="menu-group">
+            <a th:href="@{/locations}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/locations') and !#httpServletRequest.requestURI.startsWith('/location-inventory') ? ' active' : ''}">
+                <span class="menu-icon">🗺</span> 로케이션 관리
+            </a>
+            <a th:href="@{/location-inventory}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/location-inventory') ? ' active' : ''}"
+               class="menu-sub">
+                <span class="menu-icon" style="font-size:13px;">🔍</span> 재고조회
+            </a>
+        </li>
+
+        <!-- ── 입출고 ── -->
+        <li class="nav-section">입출고</li>
+        <li>
+            <a th:href="@{/orders}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/orders') ? ' active' : ''}">
+                <span class="menu-icon">📋</span> 주문 관리
+            </a>
+        </li>
+        <li>
+            <a th:href="@{/inbound}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/inbound') ? ' active' : ''}">
+                <span class="menu-icon">📥</span> 입고 처리
+            </a>
+        </li>
+        <li class="menu-group">
+            <a th:href="@{/outbound}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/outbound') ? ' active' : ''}">
+                <span class="menu-icon">📤</span> 출고 처리
+            </a>
+            <a th:href="@{/pallets}"
+               th:classappend="${#httpServletRequest.requestURI.startsWith('/pallets') ? ' active' : ''}"
+               class="menu-sub">
+                <span class="menu-icon" style="font-size:13px;">🗂</span> 팔레트 출고
+            </a>
+        </li>
+
+    </ul>
+    <div class="sidebar-user" th:if="${session.user != null}">
+        <div class="user-info">
+            <div class="user-name" th:text="${session.user.username}">-</div>
+            <div class="user-role">
+                <span th:text="${session.user.admin ? '관리자' : '일반'}">-</span>
+                <span th:if="${session.user.companyName != null and !session.user.companyName.isEmpty()}"
+                      th:text="' · ' + ${session.user.companyName}">-</span>
+            </div>
+        </div>
+        <a th:href="@{/logout}" class="logout-btn" title="로그아웃">⏻</a>
+    </div>
+</nav>
+
+<!-- ===== FLASH MESSAGE FRAGMENT (alert)===== -->
+<div th:fragment="flash" class="alert-container" id="alertContainer">
+    <div th:if="${successMsg}" class="alert alert-success toast-message" th:text="${successMsg}"></div>
+    <div th:if="${errorMsg}" class="alert alert-error toast-message" th:text="${errorMsg}"></div>
+</div>
+<!-- ===== PAGINATION FRAGMENT ===== -->
+<div th:fragment="pagination(page, url, keyword)" class="pagination-wrap">
+    <div class="page-info"
+         th:text="'전체 ' + ${page.totalElements} + '건 / ' + (${page.number} + 1) + ' 페이지 / 총 ' + ${page.totalPages} + ' 페이지'">
+    </div>
+    <div class="page-buttons" th:if="${page.totalPages > 1}">
+        <a th:if="${!page.first}"
+           th:href="${url + '?page=' + (page.number - 1) + (keyword != null ? '&keyword=' + keyword : '')}"
+           class="page-btn">&laquo; 이전</a>
+        <th:block th:each="i : ${#numbers.sequence(0, page.totalPages - 1)}">
+            <a th:href="${url + '?page=' + i + (keyword != null ? '&keyword=' + keyword : '')}"
+               th:text="${i + 1}"
+               th:classappend="${i == page.number ? ' active' : ''}"
+               class="page-btn"></a>
+        </th:block>
+        <a th:if="${!page.last}"
+           th:href="${url + '?page=' + (page.number + 1) + (keyword != null ? '&keyword=' + keyword : '')}"
+           class="page-btn">다음 &raquo;</a>
+    </div>
+</div>
+
+</html>

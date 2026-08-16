@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('주문 상세')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">주문 상세</h1>
+            <a th:href="@{/orders}" class="btn btn-outline">← 목록으로</a>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <div class="card form-card">
+                <div class="card-body">
+                    <!-- 주문 기본 정보 -->
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">주문번호</span>
+                            <span class="detail-value" th:text="${order.orderNo != null ? order.orderNo : '#' + order.id}">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">고객명</span>
+                            <span class="detail-value" th:text="${order.customerName}">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">상태</span>
+                            <span class="detail-value">
+                                <span class="badge" th:classappend="${order.statusBadgeClass}"
+                                      th:text="${order.statusLabel}">-</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 상태 흐름 표시 (세로, 한글) -->
+                    <div class="flow-v">
+                        <div th:each="s : ${T(com.logis.main.enumData.OrderStatus).values()}"
+                             class="flow-v-step"
+                             th:classappend="${order.status == s ? ' cur' : (order.status.ordinal() > s.ordinal() ? ' done' : '')}">
+                            <div class="flow-v-dot"></div>
+                            <div class="flow-v-label" th:text="${s.label}">-</div>
+                        </div>
+                    </div>
+
+                    <!-- 주문 항목 -->
+                    <h3 class="section-title">주문 항목</h3>
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>상품명</th>
+                            <th>수량</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="item : ${order.items}">
+                            <td><code th:text="${item.productSku}">-</code></td>
+                            <td th:text="${item.productName}">-</td>
+                            <td th:text="${item.quantity}">0</td>
+                        </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- 상태별 액션 버튼 -->
+                    <div class="form-actions" style="margin-top:24px;">
+                        <th:block th:switch="${order.status.name()}">
+                            <th:block th:case="'ORDER_CREATED'">
+                                <form th:action="@{/inbound/{id}/start(id=${order.id})}" method="post" style="display:inline;">
+                                    <button type="submit" class="btn btn-primary">입고 시작</button>
+                                </form>
+                            </th:block>
+                            <th:block th:case="'INBOUND_PENDING'">
+                                <form th:action="@{/inbound/{id}/complete(id=${order.id})}" method="post" style="display:inline;">
+                                    <button type="submit" class="btn btn-primary">입고 완료</button>
+                                </form>
+                            </th:block>
+                            <th:block th:case="'INBOUND_COMPLETED'">
+                                <form th:action="@{/outbound/{id}/start(id=${order.id})}" method="post" style="display:inline;">
+                                    <button type="submit" class="btn btn-primary">출고 시작</button>
+                                </form>
+                            </th:block>
+                            <th:block th:case="'OUTBOUND_PENDING'">
+                                <form th:action="@{/outbound/{id}/complete(id=${order.id})}" method="post" style="display:inline;">
+                                    <button type="submit" class="btn btn-primary">출고 완료</button>
+                                </form>
+                            </th:block>
+                            <th:block th:case="'OUTBOUND_COMPLETED'">
+                                <form th:action="@{/outbound/{id}/ship(id=${order.id})}" method="post" style="display:inline;">
+                                    <button type="submit" class="btn btn-primary">출하 처리</button>
+                                </form>
+                            </th:block>
+                            <th:block th:case="'SHIPPED'">
+                                <span class="badge badge-shipped">출하 완료</span>
+                            </th:block>
+                        </th:block>
+                        <a th:href="@{/orders}" class="btn btn-outline">목록으로</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

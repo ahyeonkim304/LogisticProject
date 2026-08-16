@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('팔레트 출고')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">팔레트 출고</h1>
+            <button class="btn btn-primary" onclick="openPalletModal()">+ 팔레트 생성</button>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <div class="pallet-layout">
+
+                <!-- ══════════════════ 좌: 팔레트 목록 ══════════════════ -->
+                <div class="pallet-left">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">활성 팔레트</h2>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <div th:if="${#lists.isEmpty(pallets)}"
+                                 class="text-center text-muted" style="padding:32px;">
+                                생성된 팔레트가 없습니다.
+                            </div>
+                            <div th:each="p : ${pallets}"
+                                 th:classappend="${selectedId != null and selectedId == p.id ? ' pallet-item-active' : ''}"
+                                 class="pallet-item">
+                                <a th:href="@{/pallets(selected=${p.id})}" class="pallet-item-link">
+                                    <div class="pallet-item-code">
+                                        <span th:if="${p.name != null and !#strings.isEmpty(p.name)}"
+                                              th:text="${p.name}"
+                                              style="font-weight:700; color:#1e293b;"></span>
+                                        <span style="font-size:11px; color:#94a3b8; margin-left:4px;"
+                                              th:text="${p.palletCode}">PLT-xxx</span>
+                                    </div>
+                                    <div class="pallet-item-meta">
+                                        <span class="badge" th:classappend="${p.statusBadgeClass}"
+                                              th:text="${p.statusLabel}">-</span>
+                                        <span class="pallet-item-date"
+                                              th:text="${#temporals.format(p.createdAt, 'MM/dd HH:mm')}">-</span>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══════════════════ 우: 팔레트 상세 ══════════════════ -->
+                <div class="pallet-right">
+
+                    <!-- 팔레트 미선택 안내 -->
+                    <div th:if="${selectedPallet == null}" class="card">
+                        <div class="card-body" style="text-align:center; padding:60px 20px;">
+                            <div style="font-size:48px; margin-bottom:12px;">📦</div>
+                            <p style="color:var(--color-muted);">좌측에서 팔레트를 선택하거나<br>새 팔레트를 생성하세요.</p>
+                        </div>
+                    </div>
+
+                    <!-- 팔레트 상세 -->
+                    <div th:if="${selectedPallet != null}">
+
+                        <!-- 팔레트 헤더 -->
+                        <div class="card" style="margin-bottom:16px;">
+                            <div class="card-header"
+                                 style="display:flex; align-items:center; justify-content:space-between;">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <div>
+                                        <h2 class="card-title"
+                                            th:text="${selectedPallet.name != null and !#strings.isEmpty(selectedPallet.name)
+                                                       ? selectedPallet.name : selectedPallet.palletCode}">-</h2>
+                                        <span th:if="${selectedPallet.name != null and !#strings.isEmpty(selectedPallet.name)}"
+                                              style="font-size:11px; color:#94a3b8;"
+                                              th:text="${selectedPallet.palletCode}">-</span>
+                                    </div>
+                                    <span class="badge" th:classappend="${selectedPallet.statusBadgeClass}"
+                                          th:text="${selectedPallet.statusLabel}">-</span>
+                                </div>
+                                <form th:action="@{/pallets/{id}/outbound(id=${selectedPallet.id})}" method="post"
+                                      onsubmit="return confirm('팔레트 출고를 처리하시겠습니까?\n재고가 FIFO 방식으로 차감되며 모든 주문이 SHIPPED로 변경됩니다.')">
+                                    <button type="submit" class="btn btn-primary"
+                                            th:disabled="${#lists.isEmpty(selectedPallet.orders)}">
+                                        출고 처리 (SHIPPED)
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- 팔레트 내 주문 목록 -->
+                        <div class="card" style="margin-bottom:16px;">
+                            <div class="card-header">
+                                <h2 class="card-title">팔레트 내 주문
+                                    <span class="count-badge"
+                                          th:text="'(' + ${#lists.size(selectedPallet.orders)} + ')'"></span>
+                                </h2>
+                            </div>
+                            <div class="card-body" style="padding:0;">
+                                <table class="data-table">
+                                    <thead>
+                                    <tr>
+                                        <th>주문번호</th>
+                                        <th>고객명</th>
+                                        <th>상품 수</th>
+                                        <th>총 수량</th>
+                                        <th>처리</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr th:if="${#lists.isEmpty(selectedPallet.orders)}">
+                                        <td colspan="5" class="text-center text-muted" style="padding:24px;">
+                                            팔레트에 주문이 없습니다.
+                                        </td>
+                                    </tr>
+                                    <tr th:each="o : ${selectedPallet.orders}">
+                                        <td>
+                                            <a th:href="@{/orders/{id}(id=${o.id})}"
+                                               th:text="${o.orderNo != null ? o.orderNo : '#' + o.id}"
+                                               class="link">-</a>
+                                        </td>
+                                        <td th:text="${o.customerName}">-</td>
+                                        <td th:text="${o.items.size()}">0</td>
+                                        <td th:text="${#aggregates.sum(o.items.![quantity])}">0</td>
+                                        <td>
+                                            <form th:action="@{/pallets/{pid}/remove-order/{oid}(pid=${selectedPallet.id},oid=${o.id})}"
+                                                  method="post" style="display:inline;"
+                                                  onsubmit="return confirm('주문을 팔레트에서 제거하면 입고 완료(INBOUND_COMPLETED) 상태로 복원됩니다.')">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">제거</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 피킹 리스트 -->
+                        <div class="card" style="margin-bottom:16px;">
+                            <div class="card-header">
+                                <h2 class="card-title">📋 피킹 리스트</h2>
+                            </div>
+                            <div class="card-body" style="padding:0;">
+                                <table class="data-table">
+                                    <thead>
+                                    <tr>
+                                        <th>SKU</th>
+                                        <th>상품명</th>
+                                        <th>로케이션</th>
+                                        <th style="text-align:right;">피킹 수량</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr th:if="${#lists.isEmpty(selectedPallet.pickingList)}">
+                                        <td colspan="4" class="text-center text-muted" style="padding:24px;">
+                                            피킹 항목이 없습니다.
+                                        </td>
+                                    </tr>
+                                    <tr th:each="item : ${selectedPallet.pickingList}"
+                                        th:classappend="${item.locationCode.startsWith('⚠') ? ' inv-row-warning' : ''}">
+                                        <td><code th:text="${item.productSku}">-</code></td>
+                                        <td th:text="${item.productName}">-</td>
+                                        <td>
+                                            <span th:if="${!item.locationCode.startsWith('⚠')}"
+                                                  class="location-badge" th:text="${item.locationCode}">-</span>
+                                            <span th:if="${item.locationCode.startsWith('⚠')}"
+                                                  class="badge badge-danger-soft" th:text="${item.locationCode}">-</span>
+                                        </td>
+                                        <td style="text-align:right; font-weight:700;"
+                                            th:classappend="${item.locationCode.startsWith('⚠') ? ' text-danger' : ' text-success'}"
+                                            th:text="${item.quantity}">0</td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 입고 완료 주문 추가 (INBOUND_COMPLETED) -->
+                        <div class="card">
+                            <div class="card-header" style="display:flex; align-items:center; gap:8px;">
+                                <h2 class="card-title">주문 추가</h2>
+                                <span class="badge badge-inbound-done" style="font-size:11px;">INBOUND_COMPLETED</span>
+                                <span style="font-size:12px; color:#64748b; margin-left:4px;">
+                                    팔레트에 넣으면 출고 대기(READY_TO_SHIP)로 변경됩니다
+                                </span>
+                            </div>
+                            <div class="card-body" style="padding:0;">
+                                <table class="data-table">
+                                    <thead>
+                                    <tr>
+                                        <th>주문번호</th>
+                                        <th>고객명</th>
+                                        <th>총 수량</th>
+                                        <th>처리</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr th:if="${#lists.isEmpty(availableOrders)}">
+                                        <td colspan="4" class="text-center text-muted" style="padding:24px;">
+                                            추가 가능한 입고 완료 주문이 없습니다.
+                                        </td>
+                                    </tr>
+                                    <tr th:each="o : ${availableOrders}">
+                                        <td>
+                                            <a th:href="@{/orders/{id}(id=${o.id})}"
+                                               th:text="${o.orderNo != null ? o.orderNo : '#' + o.id}"
+                                               class="link">-</a>
+                                        </td>
+                                        <td th:text="${o.customerName}">-</td>
+                                        <td th:text="${#aggregates.sum(o.items.![quantity])}">0</td>
+                                        <td>
+                                            <form th:action="@{/pallets/{id}/add-order(id=${selectedPallet.id})}"
+                                                  method="post" style="display:inline;">
+                                                <input type="hidden" name="orderId" th:value="${o.id}"/>
+                                                <button type="submit" class="btn btn-sm btn-primary">팔레트 배정</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div><!-- /selectedPallet != null -->
+                </div><!-- /pallet-right -->
+            </div><!-- /pallet-layout -->
+        </div>
+    </div>
+</div>
+
+<!-- ───── 팔레트 생성 모달 ───── -->
+<div id="palletModalOverlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:12px; padding:32px 28px; width:400px; max-width:90vw; box-shadow:0 8px 32px rgba(0,0,0,.18);">
+        <h3 style="margin:0 0 20px; font-size:16px; font-weight:700; color:#1e293b;">팔레트 생성</h3>
+
+        <form id="palletCreateForm" th:action="@{/pallets}" method="post">
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+                    팔레트 명칭 <span style="color:#ef4444;">*</span>
+                </label>
+                <input id="palletNameInput" type="text" name="name" class="form-input"
+                       placeholder="예: 서울행 1호" maxlength="100" autocomplete="off"
+                       style="width:100%; box-sizing:border-box;"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();submitPalletCreate();}"/>
+                <p id="palletNameError" style="display:none; color:#ef4444; font-size:12px; margin:4px 0 0;">팔레트 명칭을 입력해주세요.</p>
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" class="btn btn-outline" onclick="closePalletModal()">취소</button>
+                <button type="button" class="btn btn-primary" onclick="submitPalletCreate()">확인</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openPalletModal() {
+    document.getElementById('palletNameInput').value = '';
+    document.getElementById('palletNameError').style.display = 'none';
+    const overlay = document.getElementById('palletModalOverlay');
+    overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('palletNameInput').focus(), 80);
+}
+
+function closePalletModal() {
+    document.getElementById('palletModalOverlay').style.display = 'none';
+}
+
+function submitPalletCreate() {
+    const input = document.getElementById('palletNameInput');
+    const errMsg = document.getElementById('palletNameError');
+    if (!input.value.trim()) {
+        errMsg.style.display = 'block';
+        input.focus();
+        return;
+    }
+    errMsg.style.display = 'none';
+    document.getElementById('palletCreateForm').submit();
+}
+
+/* 오버레이 클릭 시 닫기 */
+document.getElementById('palletModalOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closePalletModal();
+});
+</script>
+</body>
+</html>

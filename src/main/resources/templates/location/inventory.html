@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('로케이션 재고조회')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <div style="display:flex; align-items:center; gap:16px;">
+                <h1 class="page-title">로케이션 재고조회</h1>
+                <!-- 뷰 모드 전환 -->
+                <div class="view-toggle">
+                    <button id="btnTreeView"  class="view-toggle-btn active" onclick="switchView('tree')">📍 트리 뷰</button>
+                    <button id="btnSkuView"   class="view-toggle-btn"        onclick="switchView('sku')">📋 SKU 목록</button>
+                </div>
+            </div>
+            <!-- SKU 검색 -->
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="skuSearch" class="form-input"
+                       style="width:260px;"
+                       placeholder="SKU / 상품명 검색..."
+                       onkeydown="if(event.key==='Enter') doSearch()"/>
+                <button class="btn btn-primary" onclick="doSearch()">🔍 검색</button>
+                <button class="btn btn-outline" onclick="clearSearch()">초기화</button>
+            </div>
+        </header>
+
+        <div class="content-body" style="padding:16px 24px;">
+
+            <!-- ══════ 트리 뷰 레이아웃 ══════ -->
+            <div id="viewTree" class="locinv-layout">
+
+                <!-- 좌: 로케이션 트리 -->
+                <div class="locinv-left">
+                    <div class="card" style="overflow:hidden;">
+                        <div class="card-header" style="padding:12px 16px;">
+                            <h2 class="card-title" style="font-size:13px;">📍 로케이션 트리</h2>
+                        </div>
+                        <div id="treeContainer"
+                             style="padding:10px 8px; height:calc(100vh - 148px); overflow-y:auto;">
+                            <div class="text-center text-muted" style="padding:24px; font-size:13px;">
+                                로케이션 데이터를 불러오는 중...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 우: 재고 현황 상세 -->
+                <div class="locinv-right">
+                    <div id="detailPanel" class="locinv-empty-state">
+                        <div style="font-size:44px; margin-bottom:12px;">📦</div>
+                        <p style="color:var(--color-muted); text-align:center; line-height:1.9; font-size:13px;">
+                            좌측 트리에서 로케이션을 선택하거나<br>상단 검색창에서 SKU를 검색하세요.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════ SKU 목록 뷰 ══════ -->
+            <div id="viewSku" style="display:none;">
+                <div class="card" style="overflow:hidden;">
+                    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+                        <h2 class="card-title">📋 전체 SKU 재고 목록</h2>
+                        <span id="skuListCount" class="count-badge"></span>
+                    </div>
+                    <div style="overflow-x:auto; height:calc(100vh - 180px); overflow-y:auto;">
+                        <table class="sku-table">
+                            <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>상품명</th>
+                                <th>로케이션 경로</th>
+                                <th style="text-align:right;">재고</th>
+                                <th>상태</th>
+                            </tr>
+                            </thead>
+                            <tbody id="skuListBody">
+                                <tr><td colspan="5" class="text-center text-muted" style="padding:32px;">로딩 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Thymeleaf → JS 데이터 주입 -->
+<script th:inline="javascript">
+/*<![CDATA[*/
+const TREE_DATA = /*[[${treeRoots}]]*/ [];
+/*]]>*/
+</script>
+
+<style>
+/* ── 뷰 토글 ── */
+.view-toggle { display:flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px; }
+.view-toggle-btn {
+    padding:5px 14px; border:none; border-radius:6px; font-size:12px; font-weight:600;
+    cursor:pointer; background:transparent; color:#64748b; transition:all .15s;
+}
+.view-toggle-btn.active { background:#fff; color:var(--color-primary); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+
+/* ── 레이아웃 ── */
+.locinv-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 14px;
+    align-items: start;
+}
+.locinv-left  { position: sticky; top: calc(var(--header-height) + 14px); }
+.locinv-right { min-width: 0; }
+
+.locinv-empty-state {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: calc(100vh - 148px);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+/* ── 창고 카드 ── */
+.wh-card { border:1px solid var(--color-border); border-radius:var(--radius); background:var(--color-surface); overflow:hidden; margin-bottom:8px; }
+.wh-header { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; user-select:none; transition:background .12s; }
+.wh-header:hover { background:#f8fafc; }
+.wh-icon { width:32px; height:32px; border-radius:7px; background:#fef3c7; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.wh-icon svg { width:15px; height:15px; stroke:#92400e; fill:none; stroke-width:1.5; }
+.wh-info  { flex:1; min-width:0; }
+.wh-name  { font-size:13px; font-weight:600; color:var(--color-text); }
+.wh-code  { font-size:10px; color:var(--color-muted); margin-top:1px; }
+.wh-pill  { display:inline-flex; align-items:center; gap:3px; font-size:11px; padding:2px 7px; border-radius:20px; background:#d1fae5; color:#065f46; flex-shrink:0; white-space:nowrap; }
+.wh-pill-dot { width:5px; height:5px; border-radius:50%; background:#10b981; }
+.wh-chev { width:14px; height:14px; flex-shrink:0; stroke:var(--color-muted); fill:none; stroke-width:1.5; transition:transform .2s; }
+.wh-chev.open { transform:rotate(90deg); }
+
+/* ── 트리 노드 ── */
+.loc-tree { padding:4px 8px 8px; }
+.loc-node { display:flex; align-items:center; gap:6px; padding:4px 7px; border-radius:5px; cursor:pointer; transition:background .1s; border:1px solid transparent; }
+.loc-node:hover { background:#f8fafc; }
+.loc-node.sel   { background:#eff6ff; border-color:#bfdbfe; }
+.loc-node.sel .loc-lname { font-weight:600; }
+.loc-icon { width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.loc-icon svg { width:10px; height:10px; stroke-width:1.5; fill:none; }
+.li-zone { background:#dbeafe; } .li-zone svg { stroke:#1e40af; }
+.li-rack { background:#fce7f3; } .li-rack svg { stroke:#be185d; }
+.li-bin  { background:#d1fae5; } .li-bin  svg { stroke:#059669; }
+.loc-lname { font-size:12px; color:var(--color-text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.loc-lcode { font-size:10px; color:var(--color-muted); white-space:nowrap; }
+.loc-cnt   { font-size:10px; color:var(--color-muted); background:#f1f5f9; padding:1px 5px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+.loc-chev  { width:12px; height:12px; stroke:var(--color-muted); fill:none; stroke-width:1.5; transition:transform .15s; flex-shrink:0; }
+.loc-chev.open { transform:rotate(90deg); }
+.indent-wrap { padding-left:10px; border-left:1.5px solid #e2e8f0; margin-left:16px; margin-top:1px; margin-bottom:1px; display:flex; flex-direction:column; gap:1px; }
+
+/* ── 우측 상세 패널 ── */
+.rp-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; height:calc(100vh - 148px); display:flex; flex-direction:column; }
+.rp-top { padding:12px 16px; border-bottom:1px solid var(--color-border); background:#f8fafc; flex-shrink:0; }
+.rp-title-row { display:flex; align-items:center; gap:8px; margin-bottom:3px; }
+.rp-name  { font-size:15px; font-weight:700; color:var(--color-text); }
+.rp-bc    { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin-top:5px; }
+.bc-item  { font-size:11px; color:var(--color-muted); }
+.bc-sep   { font-size:11px; color:#cbd5e1; }
+
+.type-badge { display:inline-flex; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+.tb-WAREHOUSE { background:#fef3c7; color:#92400e; }
+.tb-ZONE      { background:#dbeafe; color:#1e40af; }
+.tb-RACK      { background:#fce7f3; color:#9d174d; }
+.tb-BIN       { background:#d1fae5; color:#065f46; }
+
+/* ── 재고 현황 섹션 ── */
+.rp-section-title {
+    font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;
+    letter-spacing:.5px; padding:10px 16px 4px;
+}
+.rp-stats { display:flex; gap:6px; padding:0 16px 12px; flex-shrink:0; border-bottom:1px solid var(--color-border); }
+.sbox { flex:1; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; text-align:center; }
+.sval { font-size:20px; font-weight:800; color:var(--color-text); line-height:1.2; }
+.slbl { font-size:10px; color:var(--color-muted); margin-top:3px; }
+.sval-warn { color:var(--color-danger); }
+
+/* ── SKU 테이블 ── */
+.sku-table { width:100%; border-collapse:collapse; font-size:13px; }
+.sku-table th { padding:8px 14px; text-align:left; font-size:11px; font-weight:700; color:#475569; background:#f8fafc; border-bottom:2px solid var(--color-border); white-space:nowrap; position:sticky; top:0; z-index:1; }
+.sku-table td { padding:9px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.sku-table tr:last-child td { border-bottom:none; }
+.sku-table tbody tr:hover td { background:#fafafa; }
+.rp-table-wrap { flex:1; overflow-y:auto; overflow-x:auto; }
+
+.qpill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
+.qh { background:#d1fae5; color:#065f46; }
+.qm { background:#fef3c7; color:#92400e; }
+.ql { background:#fce7f3; color:#9d174d; }
+
+.loc-path { display:flex; align-items:center; gap:3px; flex-wrap:wrap; }
+.lp-chip  { font-size:10px; padding:1px 6px; border-radius:20px; white-space:nowrap; }
+.lp-ZONE  { background:#dbeafe; color:#1e40af; }
+.lp-RACK  { background:#fce7f3; color:#9d174d; }
+.lp-BIN   { background:#d1fae5; color:#065f46; }
+
+@media (max-width:1100px) {
+    .locinv-layout { grid-template-columns:1fr; }
+    .locinv-left   { position:static; }
+    .rp-card, .locinv-empty-state { height:auto; min-height:400px; }
+}
+</style>
+
+<script>
+// ── SVG 아이콘 ────────────────────────────────────────────────
+const ICONS = {
+    WAREHOUSE: '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    ZONE:      '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
+    RACK:      '<svg viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="4" y1="3" x2="4" y2="21"/><line x1="20" y1="3" x2="20" y2="21"/></svg>',
+    BIN:       '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>',
+};
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function statusLabel(st) { return st==='qh'?'충분':st==='qm'?'보통':'부족'; }
+
+// ── 뷰 모드 전환 ─────────────────────────────────────────────
+let currentView = 'tree';
+let skuListLoaded = false;
+
+function switchView(view) {
+    currentView = view;
+    document.getElementById('viewTree').style.display = view==='tree' ? 'grid' : 'none';
+    document.getElementById('viewSku').style.display  = view==='sku'  ? 'block' : 'none';
+    document.getElementById('btnTreeView').classList.toggle('active', view==='tree');
+    document.getElementById('btnSkuView').classList.toggle('active',  view==='sku');
+
+    if (view === 'sku' && !skuListLoaded) loadAllSkus();
+}
+
+// ── 트리 렌더링 ───────────────────────────────────────────────
+let selectedNodeId = null;
+
+function buildTree() {
+    const container = document.getElementById('treeContainer');
+    if (!TREE_DATA || TREE_DATA.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted" style="padding:32px; font-size:13px;">등록된 로케이션이 없습니다.</div>';
+        return;
+    }
+    container.innerHTML = TREE_DATA.map(wh => renderWarehouse(wh)).join('');
+}
+
+function renderWarehouse(wh) {
+    const pill = wh.totalQty > 0
+        ? `<span class="wh-pill"><span class="wh-pill-dot"></span>${wh.totalQty.toLocaleString()}</span>`
+        : '';
+    const body = wh.children && wh.children.length > 0
+        ? `<div class="loc-tree" id="wh-body-${wh.id}" style="display:none;">${wh.children.map(c=>renderNode(c)).join('')}</div>`
+        : '';
+    return `
+        <div class="wh-card">
+            <div class="wh-header" onclick="toggleWarehouse(${wh.id})">
+                <div class="wh-icon">${ICONS.WAREHOUSE}</div>
+                <div class="wh-info">
+                    <div class="wh-name">${esc(wh.name||wh.code)}</div>
+                    <div class="wh-code">${esc(wh.code)}</div>
+                </div>
+                ${pill}
+                <svg class="wh-chev" id="wh-chev-${wh.id}" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            ${body}
+        </div>`;
+}
+
+function renderNode(node) {
+    const hasCh = node.children && node.children.length > 0;
+    const cnt   = node.totalQty > 0 ? `<span class="loc-cnt">${node.totalQty.toLocaleString()}</span>` : '';
+    const chev  = hasCh ? `<svg class="loc-chev" id="chev-${node.id}" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>` : '';
+    const kids  = hasCh ? `<div class="indent-wrap" id="children-${node.id}" style="display:none;">${node.children.map(c=>renderNode(c)).join('')}</div>` : '';
+    return `
+        <div>
+            <div class="loc-node" id="node-${node.id}" onclick="onNodeClick(event,${node.id},${hasCh})">
+                <div class="loc-icon li-${node.type.toLowerCase()}">${ICONS[node.type]||ICONS.BIN}</div>
+                <span class="loc-lname">${esc(node.name||node.code)}</span>
+                <span class="loc-lcode">${esc(node.code)}</span>
+                ${cnt}${chev}
+            </div>
+            ${kids}
+        </div>`;
+}
+
+function toggleWarehouse(id) {
+    const body = document.getElementById(`wh-body-${id}`);
+    const chev = document.getElementById(`wh-chev-${id}`);
+    if (!body) return;
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    chev && chev.classList.toggle('open', !open);
+}
+
+function onNodeClick(e, id, hasCh) {
+    e.stopPropagation();
+    if (hasCh) {
+        const kids = document.getElementById(`children-${id}`);
+        const chev = document.getElementById(`chev-${id}`);
+        const open = kids.style.display !== 'none';
+        kids.style.display = open ? 'none' : 'flex';
+        kids.style.flexDirection = 'column';
+        chev && chev.classList.toggle('open', !open);
+    }
+    if (selectedNodeId) {
+        const prev = document.getElementById(`node-${selectedNodeId}`);
+        if (prev) prev.classList.remove('sel');
+    }
+    selectedNodeId = id;
+    document.getElementById(`node-${id}`)?.classList.add('sel');
+    loadDetail(id);
+}
+
+// ── 우측 패널: 로케이션 상세 ──────────────────────────────────
+async function loadDetail(locationId) {
+    const panel = document.getElementById('detailPanel');
+    panel.innerHTML = '<div class="locinv-empty-state"><div style="color:#94a3b8;font-size:13px;padding:40px;">불러오는 중...</div></div>';
+    try {
+        const res  = await fetch(`/location-inventory/detail/${locationId}`);
+        if (!res.ok) throw new Error('서버 오류');
+        panel.innerHTML = renderDetail(await res.json());
+    } catch (err) {
+        panel.innerHTML = `<div class="locinv-empty-state"><div style="color:#ef4444;font-size:13px;padding:40px;">로드 실패: ${esc(err.message)}</div></div>`;
+    }
+}
+
+function renderDetail(d) {
+    const bc = (d.breadcrumb||[]).map((b,i) =>
+        (i>0?'<span class="bc-sep">›</span>':'')+`<span class="bc-item">${esc(b)}</span>`
+    ).join('');
+
+    const rowsHtml = (d.items||[]).map(item => skuRow(item)).join('');
+    const empty    = (d.items||[]).length===0
+        ? `<tr><td colspan="5" class="text-center text-muted" style="padding:32px;">재고 없음</td></tr>`
+        : '';
+
+    return `
+        <div class="rp-card">
+            <div class="rp-top">
+                <div class="rp-title-row">
+                    <span class="type-badge tb-${d.type}">${esc(d.typeName)}</span>
+                    <span class="rp-name">${esc(d.name||d.code)}</span>
+                </div>
+                <div style="font-size:10px;color:var(--color-muted);">${esc(d.code)}</div>
+                <div class="rp-bc">${bc}</div>
+            </div>
+            <div class="rp-section-title">재고 현황</div>
+            <div class="rp-stats">
+                <div class="sbox"><div class="sval">${d.skuCount}</div><div class="slbl">SKU 종류</div></div>
+                <div class="sbox"><div class="sval">${(d.totalQty||0).toLocaleString()}</div><div class="slbl">총 재고</div></div>
+                <div class="sbox"><div class="sval ${d.lowStockCount>0?'sval-warn':''}">${d.lowStockCount}</div><div class="slbl">부족 항목</div></div>
+            </div>
+            <div class="rp-table-wrap">
+                <table class="sku-table">
+                    <thead><tr><th>SKU</th><th>상품명</th><th>로케이션 경로</th><th style="text-align:right;">재고</th><th>상태</th></tr></thead>
+                    <tbody>${rowsHtml}${empty}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+// ── SKU 검색 ──────────────────────────────────────────────────
+async function doSearch() {
+    const kw = document.getElementById('skuSearch').value.trim();
+    if (!kw) return;
+
+    // 트리 선택 해제
+    if (selectedNodeId) {
+        document.getElementById(`node-${selectedNodeId}`)?.classList.remove('sel');
+        selectedNodeId = null;
+    }
+    // 트리 뷰로 전환
+    if (currentView !== 'tree') switchView('tree');
+
+    const panel = document.getElementById('detailPanel');
+    panel.innerHTML = '<div class="locinv-empty-state"><div style="color:#94a3b8;font-size:13px;padding:40px;">검색 중...</div></div>';
+    try {
+        const res  = await fetch(`/location-inventory/search?keyword=${encodeURIComponent(kw)}`);
+        if (!res.ok) throw new Error('서버 오류');
+        panel.innerHTML = renderSkuListPanel(`🔍 "${esc(kw)}" 검색 결과`, await res.json(), `"${esc(kw)}" 검색 결과 없음`);
+    } catch (err) {
+        panel.innerHTML = `<div class="locinv-empty-state"><div style="color:#ef4444;font-size:13px;padding:40px;">검색 실패: ${esc(err.message)}</div></div>`;
+    }
+}
+
+// ── 전체 SKU 목록 ─────────────────────────────────────────────
+async function loadAllSkus() {
+    document.getElementById('skuListBody').innerHTML =
+        '<tr><td colspan="5" class="text-center text-muted" style="padding:32px;">불러오는 중...</td></tr>';
+    try {
+        const res  = await fetch('/location-inventory/all-skus');
+        if (!res.ok) throw new Error('서버 오류');
+        const rows = await res.json();
+        skuListLoaded = true;
+        document.getElementById('skuListCount').textContent = `총 ${rows.length}건`;
+        document.getElementById('skuListBody').innerHTML =
+            rows.length > 0
+                ? rows.map(r => skuRow(r)).join('')
+                : '<tr><td colspan="5" class="text-center text-muted" style="padding:32px;">재고 데이터가 없습니다.</td></tr>';
+    } catch (err) {
+        document.getElementById('skuListBody').innerHTML =
+            `<tr><td colspan="5" class="text-center text-muted" style="padding:32px; color:#ef4444;">로드 실패: ${esc(err.message)}</td></tr>`;
+    }
+}
+
+// ── 공통: SKU 행 렌더 / 패널 렌더 ────────────────────────────
+function skuRow(item) {
+    const chips = (item.locationPath||[]).map((p,i) => {
+        const t = (item.locationPathTypes||[])[i]||'BIN';
+        return `<span class="lp-chip lp-${t}">${esc(p)}</span>`;
+    }).join('');
+    return `
+        <tr>
+            <td><code>${esc(item.sku)}</code></td>
+            <td>${esc(item.productName||'-')}</td>
+            <td><div class="loc-path">${chips||'<span style="color:#cbd5e1;">-</span>'}</div></td>
+            <td style="text-align:right;font-weight:700;">${(item.qty||0).toLocaleString()}</td>
+            <td><span class="qpill ${item.status}">${statusLabel(item.status)}</span></td>
+        </tr>`;
+}
+
+function renderSkuListPanel(title, rows, emptyMsg) {
+    const empty = rows.length===0
+        ? `<tr><td colspan="5" class="text-center text-muted" style="padding:32px;">${emptyMsg}</td></tr>`
+        : '';
+    return `
+        <div class="rp-card">
+            <div class="rp-top">
+                <div class="rp-title-row">
+                    <span class="type-badge" style="background:#f1f5f9;color:#475569;">검색 결과</span>
+                    <span class="rp-name">${title}</span>
+                </div>
+                <div style="font-size:11px;color:var(--color-muted);">총 ${rows.length}건 검색됨</div>
+            </div>
+            <div class="rp-table-wrap">
+                <table class="sku-table">
+                    <thead><tr><th>SKU</th><th>상품명</th><th>로케이션 경로</th><th style="text-align:right;">재고</th><th>상태</th></tr></thead>
+                    <tbody>${rows.map(r=>skuRow(r)).join('')}${empty}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+function clearSearch() {
+    document.getElementById('skuSearch').value = '';
+    document.getElementById('detailPanel').innerHTML = `
+        <div class="locinv-empty-state">
+            <div style="font-size:44px;margin-bottom:12px;">📦</div>
+            <p style="color:var(--color-muted);text-align:center;line-height:1.9;font-size:13px;">
+                좌측 트리에서 로케이션을 선택하거나<br>상단 검색창에서 SKU를 검색하세요.
+            </p>
+        </div>`;
+    if (selectedNodeId) {
+        document.getElementById(`node-${selectedNodeId}`)?.classList.remove('sel');
+        selectedNodeId = null;
+    }
+}
+
+window.addEventListener('DOMContentLoaded', buildTree);
+</script>
+</body>
+</html>

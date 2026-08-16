@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('주문 생성')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">주문 생성</h1>
+            <a th:href="@{/orders}" class="btn btn-outline">← 목록으로</a>
+        </header>
+
+        <div class="content-body">
+            <div class="card form-card">
+                <div class="card-body">
+                    <form th:action="@{/orders}" th:object="${order}" method="post" id="orderForm">
+
+                        <!-- ADMIN — 고객사 선택 -->
+                        <div class="form-group" th:if="${accounts != null}">
+                            <label class="form-label">
+                                고객사 <span class="required">*</span>
+                            </label>
+                            <th:block th:if="${#lists.isEmpty(accounts)}">
+                                <div style="padding:10px 12px; background:#fef3c7; border-radius:6px; font-size:13px; color:#92400e;">
+                                    승인된 고객사가 없습니다.
+                                    <a th:href="@{/admin/accounts}" style="color:#1d4ed8;">계정 관리에서 승인</a>하세요.
+                                </div>
+                            </th:block>
+                            <th:block th:unless="${#lists.isEmpty(accounts)}">
+                                <select th:field="*{accountId}" class="form-select" required
+                                        id="accountSelect" onchange="onAccountChange()">
+                                    <option value="">— 고객사 선택 —</option>
+                                    <option th:each="acc : ${accounts}"
+                                            th:value="${acc.id}"
+                                            th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                                       ? acc.companyName + ' (' + acc.username + ')'
+                                                       : acc.username}">
+                                    </option>
+                                </select>
+                            </th:block>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">고객명 <span class="required">*</span></label>
+                            <input type="text" th:field="*{customerName}" class="form-input"
+                                   placeholder="고객명을 입력하세요"/>
+                            <div th:if="${#fields.hasErrors('customerName')}" class="field-error"
+                                 th:errors="*{customerName}"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">주문 상품 <span class="required">*</span></label>
+                            <div class="order-items-header">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="addItem()">
+                                    + 상품 추가
+                                </button>
+                            </div>
+                            <div id="itemsContainer">
+                                <!-- 기본 1행 -->
+                                <div class="order-item-row" id="item-0">
+                                    <select name="items[0].productId" class="form-select" required>
+                                        <option value="">상품 선택</option>
+                                        <option th:each="p : ${products}"
+                                                th:value="${p.id}"
+                                                th:attr="data-account-id=${p.accountId}"
+                                                th:text="${p.sku + ' - ' + p.name}">-</option>
+                                    </select>
+                                    <input type="number" name="items[0].quantity"
+                                           class="form-input qty-input" placeholder="수량" min="1" required/>
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            onclick="removeItem(0)">제거</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">주문 생성</button>
+                            <a th:href="@{/orders}" class="btn btn-outline">취소</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const allProducts = /*[[${products}]]*/ [];
+    let itemCount = 1;
+    let selectedAccountId = null;
+
+    function onAccountChange() {
+        const sel = document.getElementById('accountSelect');
+        selectedAccountId = sel ? sel.value : null;
+        // 이미 추가된 상품 행의 옵션을 필터링
+        document.querySelectorAll('#itemsContainer .order-item-row select').forEach(s => {
+            filterProductOptions(s);
+        });
+    }
+
+    function filterProductOptions(selectEl) {
+        const currentVal = selectEl.value;
+        const opts = selectEl.querySelectorAll('option[data-account-id]');
+        opts.forEach(opt => {
+            if (!selectedAccountId) {
+                opt.style.display = '';
+            } else {
+                opt.style.display = (opt.dataset.accountId === selectedAccountId) ? '' : 'none';
+            }
+        });
+        // 현재 선택된 값이 숨겨졌으면 초기화
+        const visible = Array.from(opts).filter(o => o.style.display !== 'none');
+        if (currentVal && !visible.find(o => o.value === currentVal)) {
+            selectEl.value = '';
+        }
+    }
+
+    function buildOptions() {
+        let opts = '<option value="">상품 선택</option>';
+        allProducts.forEach(p => {
+            const display = (selectedAccountId && p.accountId && String(p.accountId) !== String(selectedAccountId))
+                ? 'display:none;' : '';
+            opts += `<option value="${p.id}" data-account-id="${p.accountId || ''}" style="${display}">${p.sku} - ${p.name}</option>`;
+        });
+        return opts;
+    }
+
+    function addItem() {
+        const idx = itemCount++;
+        const row = document.createElement('div');
+        row.className = 'order-item-row';
+        row.id = 'item-' + idx;
+        row.innerHTML = `
+            <select name="items[${idx}].productId" class="form-select" required>
+                ${buildOptions()}
+            </select>
+            <input type="number" name="items[${idx}].quantity"
+                   class="form-input qty-input" placeholder="수량" min="1" required/>
+            <button type="button" class="btn btn-sm btn-danger" onclick="removeItem(${idx})">제거</button>
+        `;
+        document.getElementById('itemsContainer').appendChild(row);
+    }
+
+    function removeItem(idx) {
+        const row = document.getElementById('item-' + idx);
+        const container = document.getElementById('itemsContainer');
+        if (container.children.length <= 1) {
+            alert('최소 1개의 상품이 필요합니다.');
+            return;
+        }
+        row.remove();
+        reindexItems();
+    }
+
+    function reindexItems() {
+        const rows = document.querySelectorAll('.order-item-row');
+        rows.forEach((row, i) => {
+            row.id = 'item-' + i;
+            const sel = row.querySelector('select');
+            const inp = row.querySelector('input');
+            const btn = row.querySelector('button');
+            if (sel) sel.name = `items[${i}].productId`;
+            if (inp) inp.name = `items[${i}].quantity`;
+            if (btn) btn.setAttribute('onclick', `removeItem(${i})`);
+        });
+        itemCount = rows.length;
+    }
+    /*]]>*/
+</script>
+</body>
+</html>

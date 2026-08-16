@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('상품 등록/수정')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title" th:text="${productId} != null ? '상품 수정' : '상품 등록'">상품 등록</h1>
+            <a th:href="@{/products}" class="btn btn-outline">← 목록으로</a>
+        </header>
+
+        <div class="content-body">
+            <div class="card form-card">
+                <div class="card-body">
+                    <form th:action="${productId != null ? '/products/' + productId : '/products'}"
+                          th:object="${product}" method="post">
+
+                        <!-- ADMIN — 고객사 선택 (신규 등록 시) -->
+                        <div class="form-group" th:if="${accounts != null and productId == null}">
+                            <label class="form-label">
+                                고객사 <span class="required">*</span>
+                            </label>
+                            <th:block th:if="${#lists.isEmpty(accounts)}">
+                                <div style="padding:10px 12px; background:#fef3c7; border-radius:6px; font-size:13px; color:#92400e;">
+                                    승인된 고객사가 없습니다.
+                                    <a th:href="@{/admin/accounts}" style="color:#1d4ed8;">계정 관리에서 승인</a>하세요.
+                                </div>
+                            </th:block>
+                            <th:block th:unless="${#lists.isEmpty(accounts)}">
+                                <select th:field="*{accountId}" class="form-select" required>
+                                    <option value="">— 고객사 선택 —</option>
+                                    <option th:each="acc : ${accounts}"
+                                            th:value="${acc.id}"
+                                            th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                                       ? acc.companyName + ' (' + acc.username + ')'
+                                                       : acc.username}">
+                                    </option>
+                                </select>
+                            </th:block>
+                        </div>
+
+                        <!-- ADMIN — 수정 시 현재 고객사 표시 (읽기 전용) -->
+                        <div class="form-group" th:if="${accounts != null and productId != null}">
+                            <label class="form-label">고객사</label>
+                            <div style="padding:8px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:14px; color:#475569;">
+                                <span th:each="acc : ${accounts}"
+                                      th:if="${acc.id == currentAccountId}"
+                                      th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                                 ? acc.companyName + ' (' + acc.username + ')'
+                                                 : acc.username}">-</span>
+                            </div>
+                            <!-- 수정 시 accountId는 변경하지 않음 (hidden으로 유지) -->
+                            <input type="hidden" th:field="*{accountId}" th:value="${currentAccountId}"/>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">SKU <span class="required">*</span></label>
+                            <input type="text" th:field="*{sku}" class="form-input"
+                                   placeholder="예: SKU-001"
+                                   th:readonly="${productId != null}"/>
+                            <div th:if="${#fields.hasErrors('sku')}" class="field-error"
+                                 th:errors="*{sku}"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">상품명 <span class="required">*</span></label>
+                            <input type="text" th:field="*{name}" class="form-input"
+                                   placeholder="상품명을 입력하세요"/>
+                            <div th:if="${#fields.hasErrors('name')}" class="field-error"
+                                 th:errors="*{name}"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">안전 재고 수량</label>
+                            <input type="number" th:field="*{safetyStock}" class="form-input"
+                                   min="0" placeholder="0"/>
+                            <div th:if="${#fields.hasErrors('safetyStock')}" class="field-error"
+                                 th:errors="*{safetyStock}"></div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">저장</button>
+                            <a th:href="@{/products}" class="btn btn-outline">취소</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

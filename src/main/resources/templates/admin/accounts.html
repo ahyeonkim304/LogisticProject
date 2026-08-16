@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>계정 관리 - WMS</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="app-layout">
+  <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+  <div class="main-content">
+    <div class="content-body">
+      <div id="toast-container" class="alert-container"></div>
+      <header class="page-header">
+        <h1 class="page-title">계정 관리</h1>
+        <button class="btn btn-primary" onclick="openPanel('create')">+ 계정 등록</button>
+      </header>
+
+      <div class="tab-bar" style="margin-bottom:16px">
+        <button class="tab-btn active" onclick="setTab('',this)">전체</button>
+        <button class="tab-btn" onclick="setTab('PENDING',this)">승인 대기</button>
+        <button class="tab-btn" onclick="setTab('APPROVED',this)">승인 완료</button>
+        <button class="tab-btn" onclick="setTab('REJECTED',this)">승인 거부</button>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+            <input id="filter-kw" class="form-control" placeholder="아이디 또는 회사명" style="width:220px">
+            <button class="btn btn-secondary" onclick="load(0)">검색</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr><th>아이디</th><th>회사명</th><th>역할</th><th>상태</th><th>가입일</th><th>관리</th></tr>
+            </thead>
+            <tbody id="account-body"><tr><td colspan="6" class="text-center text-muted">로딩 중...</td></tr></tbody>
+          </table>
+          <div id="pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 드로어 배경 -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closePanel()"></div>
+
+<!-- 등록 / 수정 드로어 -->
+<div class="drawer" id="side-panel">
+  <div class="drawer-header">
+    <h3 id="panel-title">계정 등록</h3>
+    <button class="drawer-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group">
+      <label class="form-label">아이디 <span class="text-danger">*</span></label>
+      <input id="p-username" class="form-control" placeholder="아이디">
+    </div>
+    <div class="form-group" id="p-password-group">
+      <label class="form-label">비밀번호 <span class="text-danger">*</span></label>
+      <input id="p-password" type="password" class="form-control" placeholder="비밀번호">
+    </div>
+    <div class="form-group">
+      <label class="form-label">회사명</label>
+      <input id="p-company" class="form-control" placeholder="회사명 (선택)">
+    </div>
+    <div class="form-group">
+      <label class="form-label">역할</label>
+      <select id="p-role" class="form-control">
+        <option value="CLIENT">일반</option>
+        <option value="ADMIN">관리자</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">상태</label>
+      <select id="p-status" class="form-control">
+        <option value="APPROVED">승인 완료</option>
+        <option value="PENDING">승인 대기</option>
+        <option value="REJECTED">승인 거부</option>
+      </select>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-secondary" onclick="closePanel()">취소</button>
+    <button class="btn btn-primary" onclick="submitPanel()">저장</button>
+  </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+<script>
+const STATUS_BADGE = { PENDING:'badge-yellow', APPROVED:'badge-green', REJECTED:'badge-red' };
+const STATUS_LABEL = { PENDING:'승인 대기', APPROVED:'승인 완료', REJECTED:'승인 거부' };
+const ROLE_LABEL   = { ADMIN:'관리자', CLIENT:'일반' };
+let currentPage = 0, currentStatus = '', editingId = null;
+
+function setTab(status, el) {
+  currentStatus = status;
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  load(0);
+}
+
+function openPanel(mode, r) {
+  editingId = mode === 'edit' ? r.id : null;
+  document.getElementById('panel-title').textContent = mode === 'edit' ? '계정 수정' : '계정 등록';
+  const pwGroup = document.getElementById('p-password-group');
+  const usernameEl = document.getElementById('p-username');
+  if (mode === 'edit') {
+    pwGroup.style.display = 'none';
+    usernameEl.value = r.username; usernameEl.disabled = true;
+    document.getElementById('p-company').value = r.companyName || '';
+    document.getElementById('p-role').value    = r.role;
+    document.getElementById('p-status').value  = r.status;
+  } else {
+    pwGroup.style.display = '';
+    usernameEl.value = ''; usernameEl.disabled = false;
+    ['p-password','p-company'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('p-role').value   = 'CLIENT';
+    document.getElementById('p-status').value = 'APPROVED';
+  }
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('open');
+  editingId = null;
+}
+
+async function submitPanel() {
+  try {
+    if (editingId) {
+      const companyName = document.getElementById('p-company').value.trim();
+      const role        = document.getElementById('p-role').value;
+      const status      = document.getElementById('p-status').value;
+      await apiFetch('PUT', `/admin/accounts/${editingId}`, { companyName, role, status });
+      showToast('계정이 수정되었습니다.');
+    } else {
+      const username    = document.getElementById('p-username').value.trim();
+      const password    = document.getElementById('p-password').value.trim();
+      const companyName = document.getElementById('p-company').value.trim();
+      const role        = document.getElementById('p-role').value;
+      const status      = document.getElementById('p-status').value;
+      if (!username || !password) { showToast('아이디와 비밀번호를 입력해주세요.', 'error'); return; }
+      await apiFetch('POST', '/admin/accounts', { username, password, companyName, role, status });
+      showToast('계정이 등록되었습니다.');
+    }
+    closePanel(); load(editingId ? currentPage : 0);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function load(page = 0) {
+  currentPage = page;
+  let params = `page=${page}&size=20`;
+  if (currentStatus) params += '&status=' + currentStatus;
+  const kw = document.getElementById('filter-kw').value.trim();
+  if (kw) params += '&keyword=' + encodeURIComponent(kw);
+  try {
+    const data = await apiFetch('GET', `/admin/accounts?${params}`);
+    const rows = data.content ?? [];
+    document.getElementById('account-body').innerHTML = !rows.length
+      ? '<tr><td colspan="6" class="text-center text-muted">계정이 없습니다.</td></tr>'
+      : rows.map(r => `<tr>
+          <td><strong>${escHtml(r.username)}</strong></td>
+          <td>${escHtml(r.companyName) || '<span class="text-muted">-</span>'}</td>
+          <td><span class="badge badge-blue">${ROLE_LABEL[r.role] || escHtml(r.role)}</span></td>
+          <td><span class="badge ${STATUS_BADGE[r.status]||''}">${STATUS_LABEL[r.status]||escHtml(r.status)}</span></td>
+          <td>${fmtDate(r.createdAt)}</td>
+          <td>${actionBtns(r)}</td>
+        </tr>`).join('');
+    renderPagination(document.getElementById('pagination'), data, load);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function actionBtns(r) {
+  const btns = [];
+  if (r.status === 'PENDING') {
+    btns.push(`<button class="btn btn-xs btn-success" onclick="changeStatus(${r.id},'APPROVED')">승인</button>`);
+    btns.push(`<button class="btn btn-xs btn-danger" onclick="changeStatus(${r.id},'REJECTED')">거부</button>`);
+  }
+  if (r.status === 'APPROVED') {
+    btns.push(`<button class="btn btn-xs btn-danger" onclick="changeStatus(${r.id},'REJECTED')">거부</button>`);
+    if (r.role !== 'ADMIN') btns.push(`<button class="btn btn-xs btn-secondary" onclick="changeRole(${r.id},'ADMIN')">관리자 승격</button>`);
+    else                    btns.push(`<button class="btn btn-xs btn-secondary" onclick="changeRole(${r.id},'CLIENT')">일반으로</button>`);
+  }
+  if (r.status === 'REJECTED')
+    btns.push(`<button class="btn btn-xs btn-primary" onclick="changeStatus(${r.id},'APPROVED')">승인</button>`);
+  btns.push(`<button class="btn btn-xs btn-secondary" onclick='openPanel("edit",${JSON.stringify(r)})'>수정</button>`);
+  btns.push(`<button class="btn btn-xs btn-danger" onclick="deleteAccount(${r.id})">삭제</button>`);
+  return btns.join(' ');
+}
+
+async function changeStatus(id, status) {
+  const label = STATUS_LABEL[status] || status;
+  if (!confirm(`이 계정을 "${label}" 상태로 변경하시겠습니까?`)) return;
+  try { await apiFetch('PATCH', `/admin/accounts/${id}/status`, { status }); showToast(`${label} 처리되었습니다.`); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+async function changeRole(id, role) {
+  const label = ROLE_LABEL[role] || role;
+  if (!confirm(`역할을 "${label}"(으)로 변경하시겠습니까?`)) return;
+  try { await apiFetch('PATCH', `/admin/accounts/${id}/role`, { role }); showToast('역할이 변경되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+async function deleteAccount(id) {
+  if (!confirm('이 계정을 삭제하시겠습니까? 복구할 수 없습니다.')) return;
+  try { await apiFetch('DELETE', `/admin/accounts/${id}`); showToast('계정이 삭제되었습니다.'); load(currentPage); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+document.getElementById('filter-kw').addEventListener('keydown', e => { if (e.key === 'Enter') load(0); });
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('승인 대기 계정')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">승인 대기 계정</h1>
+            <a th:href="@{/admin/accounts}" class="btn btn-outline">전체 계정 목록</a>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="badge badge-inbound-pending">PENDING</span>
+                        승인 대기 중인 계정
+                        <span class="count-badge" th:text="'(' + ${accounts.size()} + '건)'">-</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>아이디</th>
+                            <th>회사명</th>
+                            <th>가입일시</th>
+                            <th>처리</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:if="${#lists.isEmpty(accounts)}">
+                            <td colspan="5" class="text-center text-muted">승인 대기 계정이 없습니다.</td>
+                        </tr>
+                        <tr th:each="a : ${accounts}">
+                            <td th:text="${a.id}">-</td>
+                            <td><strong th:text="${a.username}">-</strong></td>
+                            <td th:text="${a.companyName != null ? a.companyName : '-'}">-</td>
+                            <td th:text="${a.createdAt != null ? #temporals.format(a.createdAt, 'yyyy-MM-dd HH:mm') : '-'}">-</td>
+                            <td class="action-col">
+                                <form th:action="@{/admin/accounts/{id}/approve(id=${a.id})}"
+                                      method="post" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm btn-primary">승인</button>
+                                </form>
+                                <form th:action="@{/admin/accounts/{id}/reject(id=${a.id})}"
+                                      method="post" style="display:inline;"
+                                      onsubmit="return confirm('이 계정을 거부하시겠습니까?')">
+                                    <button type="submit" class="btn btn-sm btn-danger">거부</button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

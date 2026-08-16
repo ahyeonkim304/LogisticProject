@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('로케이션 관리')}"></head>
+<body>
+<div class="app-layout">
+    <nav th:replace="~{fragments/layout :: sidebar}"></nav>
+
+    <div class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">로케이션 관리</h1>
+            <a th:href="@{/locations(action='new')}" class="btn btn-primary">+ 로케이션 등록</a>
+        </header>
+
+        <div class="content-body">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <!-- 유형 범례 -->
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+                <span style="font-size:12px; color:#64748b; font-weight:600; margin-right:4px;">유형</span>
+                <span class="loc-badge loc-warehouse">창고</span>
+                <span class="loc-badge loc-zone">존</span>
+                <span class="loc-badge loc-rack">랙</span>
+                <span class="loc-badge loc-bin">빈</span>
+            </div>
+
+            <!-- 트리 목록 -->
+            <div class="card" style="overflow:hidden;">
+                <div id="locTreeWrap" style="padding:14px 12px; min-height:120px;">
+                    <div class="text-center text-muted" style="padding:24px;">불러오는 중...</div>
+                </div>
+            </div>
+
+        </div><!-- /content-body -->
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     백드롭 + 우측 슬라이드 패널 (CRUD 폼)
+     ══════════════════════════════════════════════════════ -->
+<div class="panel-backdrop"
+     th:classappend="${panelOpen} ? ' open'"
+     onclick="closePanel()"></div>
+
+<div class="side-panel" th:classappend="${panelOpen} ? ' open'">
+    <div class="side-panel-header">
+        <span class="side-panel-title" th:text="${panelTitle ?: '로케이션'}">로케이션</span>
+        <button type="button" class="side-panel-close" onclick="closePanel()">✕</button>
+    </div>
+
+    <div class="side-panel-body">
+        <div th:if="${errorMsg}" class="alert alert-error" th:text="${errorMsg}"></div>
+
+        <form th:action="${editId != null ? '/locations/' + editId : '/locations'}"
+              th:object="${dto}"
+              method="post">
+
+            <!-- ADMIN — 고객사 선택 -->
+            <div class="form-group" th:if="${accounts != null}">
+                <label class="form-label">고객사 <span class="required">*</span></label>
+                <th:block th:if="${#lists.isEmpty(accounts)}">
+                    <div style="padding:10px 12px; background:#fef3c7; border-radius:6px; font-size:13px; color:#92400e;">
+                        승인된 고객사가 없습니다.
+                        <a th:href="@{/admin/accounts}" style="color:#1d4ed8;">계정 관리에서 승인</a>하세요.
+                    </div>
+                </th:block>
+                <th:block th:unless="${#lists.isEmpty(accounts)}">
+                    <select th:field="*{accountId}" class="form-select" required>
+                        <option value="">— 고객사 선택 —</option>
+                        <option th:each="acc : ${accounts}"
+                                th:value="${acc.id}"
+                                th:text="${acc.companyName != null and !#strings.isEmpty(acc.companyName)
+                                           ? acc.companyName + ' (' + acc.username + ')'
+                                           : acc.username}">
+                        </option>
+                    </select>
+                    <p class="field-error" th:if="${#fields.hasErrors('accountId')}" th:errors="*{accountId}"></p>
+                </th:block>
+            </div>
+
+            <!-- 코드 -->
+            <div class="form-group">
+                <label class="form-label">
+                    코드 <span class="required">*</span>
+                    <span class="form-hint">자동 대문자 변환</span>
+                </label>
+                <input type="text" th:field="*{code}" class="form-input"
+                       th:classappend="${#fields.hasErrors('code')} ? ' input-error'"
+                       placeholder="예: BIN-A1-01"
+                       oninput="this.value = this.value.toUpperCase()"
+                       autocomplete="off"/>
+                <p class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></p>
+            </div>
+
+            <!-- 이름 -->
+            <div class="form-group">
+                <label class="form-label">이름</label>
+                <input type="text" th:field="*{name}" class="form-input" placeholder="예: A1-01 빈"/>
+            </div>
+
+            <!-- 유형 -->
+            <div class="form-group">
+                <label class="form-label">유형 <span class="required">*</span></label>
+                <select th:field="*{type}" class="form-select"
+                        th:classappend="${#fields.hasErrors('type')} ? ' input-error'">
+                    <option value="">— 유형 선택 —</option>
+                    <option th:each="t : ${locationTypes}"
+                            th:value="${t.name()}"
+                            th:text="${t.name() == 'WAREHOUSE' ? '창고 (WAREHOUSE)' :
+                                       t.name() == 'ZONE'      ? '존 (ZONE)' :
+                                       t.name() == 'RACK'      ? '랙 (RACK)' :
+                                                                  '빈 (BIN)'}">
+                    </option>
+                </select>
+                <p class="field-error" th:if="${#fields.hasErrors('type')}" th:errors="*{type}"></p>
+            </div>
+
+            <!-- 상위 로케이션 -->
+            <div class="form-group">
+                <label class="form-label">상위 로케이션</label>
+                <select th:field="*{parentId}" class="form-select">
+                    <option value="">— 없음 (최상위)</option>
+                    <option th:each="p : ${parentCandidates}"
+                            th:value="${p.id}"
+                            th:text="${p.code + (p.name != null and !#strings.isEmpty(p.name) ? '  (' + p.name + ')' : '')}"
+                            th:disabled="${editId != null and p.id == editId}">
+                    </option>
+                </select>
+            </div>
+
+            <!-- 버튼 -->
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary"
+                        th:text="${editId != null ? '수정 완료' : '등록'}">등록</button>
+                <button type="button" class="btn btn-secondary" onclick="closePanel()">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     위치 데이터 (inline JS)
+     ══════════════════════════════════════════════════════ -->
+<script th:inline="javascript">
+/*<![CDATA[*/
+const LOC_LIST = /*[[${locations}]]*/ [];
+/*]]>*/
+</script>
+
+<style>
+/* ── 유형 뱃지 ── */
+.loc-badge { display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:700; letter-spacing:.3px; }
+.loc-warehouse { background:#fef3c7; color:#92400e; }
+.loc-zone      { background:#dbeafe; color:#1e40af; }
+.loc-rack      { background:#ffedd5; color:#9a3412; }
+.loc-bin       { background:#d1fae5; color:#065f46; }
+
+/* ── 트리 노드 ── */
+.ltree-wh-card { border:1px solid var(--color-border); border-radius:var(--radius); background:var(--color-surface); overflow:hidden; margin-bottom:10px; }
+.ltree-wh-header {
+    display:flex; align-items:center; gap:10px; padding:11px 14px;
+    cursor:pointer; user-select:none; transition:background .12s;
+}
+.ltree-wh-header:hover { background:#f8fafc; }
+.ltree-wh-icon { width:34px; height:34px; border-radius:8px; background:#fef3c7; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ltree-wh-icon svg { width:16px; height:16px; stroke:#92400e; fill:none; stroke-width:1.5; }
+.ltree-wh-info { flex:1; min-width:0; }
+.ltree-wh-name { font-size:13px; font-weight:600; color:var(--color-text); }
+.ltree-wh-code { font-size:10px; color:var(--color-muted); margin-top:1px; }
+.ltree-wh-chev { width:15px; height:15px; flex-shrink:0; stroke:var(--color-muted); fill:none; stroke-width:1.5; transition:transform .2s; }
+.ltree-wh-chev.open { transform:rotate(90deg); }
+.ltree-wh-body { padding:6px 10px 10px; }
+
+.ltree-row     { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:6px; cursor:default; }
+.ltree-row:hover { background:#f8fafc; }
+.ltree-icon    { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ltree-icon svg { width:11px; height:11px; stroke-width:1.5; fill:none; }
+.lti-zone { background:#dbeafe; } .lti-zone svg { stroke:#1e40af; }
+.lti-rack { background:#fce7f3; } .lti-rack svg { stroke:#be185d; }
+.lti-bin  { background:#d1fae5; } .lti-bin  svg { stroke:#059669; }
+
+.ltree-name  { font-size:12px; color:var(--color-text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ltree-code  { font-size:10px; color:var(--color-muted); white-space:nowrap; font-family:monospace; }
+.ltree-inactive .ltree-name,
+.ltree-inactive .ltree-code { opacity:.45; }
+.ltree-status-badge { font-size:10px; padding:1px 6px; border-radius:10px; white-space:nowrap; }
+
+.ltree-actions { display:flex; gap:4px; flex-shrink:0; }
+.ltree-btn { padding:3px 8px; font-size:11px; font-weight:600; border-radius:5px; cursor:pointer; border:1px solid; text-decoration:none; display:inline-flex; align-items:center; transition:background .12s, color .12s; }
+.ltree-btn-edit   { background:transparent; border-color:var(--color-border); color:#475569; }
+.ltree-btn-edit:hover { background:#f1f5f9; }
+.ltree-btn-toggle-deact { background:transparent; border-color:#fbbf24; color:#d97706; }
+.ltree-btn-toggle-deact:hover { background:#fef9c3; }
+.ltree-btn-toggle-act { background:transparent; border-color:#6ee7b7; color:#059669; }
+.ltree-btn-toggle-act:hover { background:#d1fae5; }
+.ltree-btn-del { background:transparent; border-color:#fca5a5; color:#ef4444; }
+.ltree-btn-del:hover { background:#fee2e2; }
+
+.ltree-indent { padding-left:12px; border-left:1.5px solid #e2e8f0; margin-left:18px; margin-top:2px; margin-bottom:2px; display:flex; flex-direction:column; gap:1px; }
+.ltree-chev { width:13px; height:13px; stroke:var(--color-muted); fill:none; stroke-width:1.5; transition:transform .15s; flex-shrink:0; cursor:pointer; }
+.ltree-chev.open { transform:rotate(90deg); }
+
+/* ── 사이드 패널 ── */
+.panel-backdrop { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:298; }
+.panel-backdrop.open { display:block; }
+.side-panel { position:fixed; top:0; right:0; width:440px; height:100vh; background:#fff; border-left:1px solid var(--color-border); box-shadow:-6px 0 24px rgba(0,0,0,.12); z-index:299; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+.side-panel.open { transform:translateX(0); }
+.side-panel-header { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:60px; border-bottom:1px solid var(--color-border); background:#f8fafc; flex-shrink:0; }
+.side-panel-title  { font-size:16px; font-weight:700; color:var(--color-text); }
+.side-panel-close  { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border:none; background:transparent; border-radius:6px; cursor:pointer; font-size:16px; color:#64748b; transition:background .15s, color .15s; }
+.side-panel-close:hover { background:#f1f5f9; color:#1e293b; }
+.side-panel-body  { flex:1; overflow-y:auto; padding:24px; }
+.form-hint  { font-size:11px; font-weight:400; color:#94a3b8; margin-left:6px; }
+.input-error { border-color:var(--color-danger) !important; box-shadow:0 0 0 3px rgba(239,68,68,.1) !important; }
+</style>
+
+<script>
+const TREE_ICONS = {
+    WAREHOUSE: '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    ZONE:      '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
+    RACK:      '<svg viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="4" y1="3" x2="4" y2="21"/><line x1="20" y1="3" x2="20" y2="21"/></svg>',
+    BIN:       '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>',
+};
+const TYPE_LABEL = { WAREHOUSE:'창고', ZONE:'존', RACK:'랙', BIN:'빈' };
+const TYPE_BADGE_CLASS = { WAREHOUSE:'loc-warehouse', ZONE:'loc-zone', RACK:'loc-rack', BIN:'loc-bin' };
+
+function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 트리 구성 ─────────────────────────────────────────────────
+function buildLocTree() {
+    const wrap = document.getElementById('locTreeWrap');
+    if (!LOC_LIST || LOC_LIST.length === 0) {
+        wrap.innerHTML = '<div class="text-center text-muted" style="padding:48px;">등록된 로케이션이 없습니다. <a href="/locations?action=new" style="color:#3b82f6;">등록하러 가기</a></div>';
+        return;
+    }
+
+    // id → node map
+    const map = {};
+    LOC_LIST.forEach(l => { map[l.id] = Object.assign({children:[]}, l); });
+
+    const roots = [];
+    LOC_LIST.forEach(l => {
+        if (l.parentId && map[l.parentId]) map[l.parentId].children.push(map[l.id]);
+        else if (!l.parentId) roots.push(map[l.id]);
+        else roots.push(map[l.id]); // 부모 없는 고아 → 루트
+    });
+
+    wrap.innerHTML = roots.map(r =>
+        (r.type === 'WAREHOUSE' ? renderLtreeWarehouse(r) : renderLtreeNode(r, 0))
+    ).join('');
+}
+
+function renderLtreeWarehouse(node) {
+    const childrenHtml = node.children && node.children.length > 0
+        ? node.children.map(c => renderLtreeNode(c, 1)).join('')
+        : '';
+    const statusBadge = node.active
+        ? '<span class="badge badge-inbound-done" style="font-size:10px;">활성</span>'
+        : '<span class="badge badge-secondary" style="font-size:10px;">비활성</span>';
+    return `
+        <div class="ltree-wh-card">
+            <div class="ltree-wh-header" onclick="toggleLtreeWh(${node.id})">
+                <div class="ltree-wh-icon">${TREE_ICONS.WAREHOUSE}</div>
+                <div class="ltree-wh-info">
+                    <div class="ltree-wh-name">${escH(node.name || node.code)}</div>
+                    <div class="ltree-wh-code">${escH(node.code)}</div>
+                </div>
+                ${statusBadge}
+                ${renderLtreeActions(node)}
+                <svg class="ltree-wh-chev" id="ltree-wh-chev-${node.id}" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div id="ltree-wh-${node.id}" style="display:none;" class="ltree-wh-body">
+                ${childrenHtml}
+            </div>
+        </div>`;
+}
+
+function renderLtreeNode(node, depth) {
+    const hasChildren = node.children && node.children.length > 0;
+    const iconCls = `ltree-icon lti-${node.type.toLowerCase()}`;
+    const icon = TREE_ICONS[node.type] || TREE_ICONS.BIN;
+    const statusBadge = node.active
+        ? '<span class="badge badge-inbound-done" style="font-size:10px;">활성</span>'
+        : '<span class="badge badge-secondary" style="font-size:10px;">비활성</span>';
+    const chevHtml = hasChildren
+        ? `<svg class="ltree-chev" id="ltree-chev-${node.id}" viewBox="0 0 24 24" onclick="event.stopPropagation(); toggleLtreeNode('ltree-indent-${node.id}', 'ltree-chev-${node.id}')"><polyline points="9 18 15 12 9 6"/></svg>`
+        : '';
+    const childrenHtml = hasChildren
+        ? `<div class="ltree-indent" id="ltree-indent-${node.id}" style="display:none;">${node.children.map(c => renderLtreeNode(c, depth+1)).join('')}</div>`
+        : '';
+
+    return `
+        <div>
+            <div class="ltree-row${node.active ? '' : ' ltree-inactive'}">
+                ${chevHtml}
+                <div class="${iconCls}">${icon}</div>
+                <span class="ltree-name">${escH(node.name || node.code)}</span>
+                <span class="ltree-code">${escH(node.code)}</span>
+                ${statusBadge}
+                ${renderLtreeActions(node)}
+            </div>
+            ${childrenHtml}
+        </div>`;
+}
+
+function renderLtreeActions(node) {
+    const editUrl = `/locations?editId=${node.id}`;
+    const toggleLabel = node.active ? '비활성화' : '활성화';
+    const toggleCls   = node.active ? 'ltree-btn-toggle-deact' : 'ltree-btn-toggle-act';
+    return `
+        <div class="ltree-actions" onclick="event.stopPropagation()">
+            <a href="${editUrl}" class="ltree-btn ltree-btn-edit">수정</a>
+            <button class="ltree-btn ${toggleCls}" onclick="ltreeToggle(${node.id})">${escH(toggleLabel)}</button>
+            <button class="ltree-btn ltree-btn-del" onclick="ltreeDelete(${node.id})">삭제</button>
+        </div>`;
+}
+
+// ── localStorage 상태 ──────────────────────────────────────────
+const LS_KEY = 'ltreeOpenWh';
+function getOpenWhs() {
+    try { return new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]')); }
+    catch(e) { return new Set(); }
+}
+function saveOpenWhs(set) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify([...set])); } catch(e) {}
+}
+
+// ── 창고 토글: 모든 하위 일괄 펼침 / 접기 ─────────────────────
+function toggleLtreeWh(whId) {
+    const body = document.getElementById(`ltree-wh-${whId}`);
+    const chev = document.getElementById(`ltree-wh-chev-${whId}`);
+    const open = body.style.display !== 'none';
+    const whs  = getOpenWhs();
+
+    if (open) {
+        body.style.display = 'none';
+        chev && chev.classList.remove('open');
+        whs.delete(String(whId));
+    } else {
+        body.style.display = 'block';
+        chev && chev.classList.add('open');
+        // 모든 하위 indent + chev 한 번에 펼치기
+        body.querySelectorAll('.ltree-indent').forEach(el => {
+            el.style.display = 'flex';
+            el.style.flexDirection = 'column';
+        });
+        body.querySelectorAll('.ltree-chev').forEach(el => el.classList.add('open'));
+        whs.add(String(whId));
+    }
+    saveOpenWhs(whs);
+}
+
+function toggleLtreeNode(indentId, chevId) {
+    const indent = document.getElementById(indentId);
+    const chev   = document.getElementById(chevId);
+    const open   = indent.style.display !== 'none';
+    indent.style.display = open ? 'none' : 'flex';
+    if (!open) indent.style.flexDirection = 'column';
+    chev && chev.classList.toggle('open', !open);
+}
+
+// ── 페이지 로드 후 이전 창고 펼침 상태 복원 ───────────────────
+function restoreLtreeState() {
+    getOpenWhs().forEach(whId => {
+        const body = document.getElementById(`ltree-wh-${whId}`);
+        const chev = document.getElementById(`ltree-wh-chev-${whId}`);
+        if (!body) return; // 삭제된 창고는 무시
+        body.style.display = 'block';
+        chev && chev.classList.add('open');
+        body.querySelectorAll('.ltree-indent').forEach(el => {
+            el.style.display = 'flex';
+            el.style.flexDirection = 'column';
+        });
+        body.querySelectorAll('.ltree-chev').forEach(el => el.classList.add('open'));
+    });
+}
+
+// ── 액션: 비활성/활성 토글 ────────────────────────────────────
+function ltreeToggle(id) {
+    if (!confirm('활성/비활성 상태를 변경하시겠습니까?')) return;
+    postForm(`/locations/${id}/toggle`);
+}
+
+// ── 액션: 삭제 ───────────────────────────────────────────────
+function ltreeDelete(id) {
+    if (!confirm('삭제하시겠습니까? 재고가 있으면 삭제되지 않습니다.')) return;
+    postForm(`/locations/${id}/delete`);
+}
+
+// ── 동적 form 제출 (CSRF 토큰 포함) ──────────────────────────
+function postForm(action) {
+    const f = document.createElement('form');
+    f.method = 'POST';
+    f.action = action;
+    // 사이드 패널 form 의 CSRF hidden input 을 복사
+    const csrfInput = document.querySelector('input[name="_csrf"]');
+    if (csrfInput) {
+        const hidden = document.createElement('input');
+        hidden.type  = 'hidden';
+        hidden.name  = csrfInput.name;
+        hidden.value = csrfInput.value;
+        f.appendChild(hidden);
+    }
+    document.body.appendChild(f);
+    f.submit();
+}
+
+// ── 사이드 패널 ───────────────────────────────────────────────
+function closePanel() {
+    document.querySelector('.side-panel').classList.remove('open');
+    document.querySelector('.panel-backdrop').classList.remove('open');
+    history.replaceState(null, '', '/locations');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+// ── 초기화 ───────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+    buildLocTree();
+    restoreLtreeState();
+});
+</script>
+</body>
+</html>
