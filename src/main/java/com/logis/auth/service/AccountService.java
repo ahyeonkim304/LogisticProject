@@ -104,7 +104,7 @@ public class AccountService {
     @Transactional(readOnly = true)
     public Page<AccountResponseDto> getAllAccounts(String keyword, Pageable pageable) {
         Page<Account> page = (keyword != null && !keyword.isBlank())
-                ? accountRepository.searchAllByKeyword(keyword.trim(), pageable)
+                ? accountRepository.searchAllByKeyword("%" + keyword.trim().toLowerCase() + "%", pageable)
                 : accountRepository.findByDeletedFalse(pageable);
         return page.map(AccountResponseDto::from);
     }
@@ -123,7 +123,7 @@ public class AccountService {
     @Transactional(readOnly = true)
     public List<AccountResponseDto> getPendingAccounts(String keyword) {
         List<Account> accounts = (keyword != null && !keyword.isBlank())
-                ? accountRepository.searchByStatus(AccountStatus.PENDING, keyword.trim())
+                ? accountRepository.searchByStatus(AccountStatus.PENDING, "%" + keyword.trim().toLowerCase() + "%")
                 : accountRepository.findByStatusAndDeletedFalse(AccountStatus.PENDING);
         return accounts.stream().map(AccountResponseDto::from).collect(Collectors.toList());
     }
@@ -142,7 +142,7 @@ public class AccountService {
     @Transactional(readOnly = true)
     public List<AccountResponseDto> getApprovedAccounts(String keyword) {
         List<Account> accounts = (keyword != null && !keyword.isBlank())
-                ? accountRepository.searchByStatus(AccountStatus.APPROVED, keyword.trim())
+                ? accountRepository.searchByStatus(AccountStatus.APPROVED, "%" + keyword.trim().toLowerCase() + "%")
                 : accountRepository.findByStatusAndDeletedFalse(AccountStatus.APPROVED);
         return accounts.stream().map(AccountResponseDto::from).collect(Collectors.toList());
     }
@@ -227,8 +227,9 @@ public class AccountService {
         AccountStatus accountStatus = (status != null && !status.isBlank())
                 ? AccountStatus.valueOf(status)
                 : null;
-        String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
-        Page<Account> page = accountRepository.searchAccounts(accountStatus, kw, pageable);
+        String pattern = (keyword != null && !keyword.isBlank())
+                ? "%" + keyword.trim().toLowerCase() + "%" : null;
+        Page<Account> page = accountRepository.searchAccounts(accountStatus, pattern, pageable);
         return page.map(AccountResponseDto::from);
     }
 

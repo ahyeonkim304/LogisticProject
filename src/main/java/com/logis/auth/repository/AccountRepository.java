@@ -21,21 +21,21 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     boolean existsByUsername(String username);
 
     @Query("SELECT a FROM Account a WHERE a.deleted = false " +
-           "AND (LOWER(a.username) LIKE LOWER(CONCAT('%', :kw, '%')) " +
-           "OR (a.companyName IS NOT NULL AND LOWER(a.companyName) LIKE LOWER(CONCAT('%', :kw, '%'))))")
-    Page<Account> searchAllByKeyword(@Param("kw") String kw, Pageable pageable);
+           "AND (LOWER(a.username) LIKE :pattern " +
+           "OR (a.companyName IS NOT NULL AND LOWER(a.companyName) LIKE :pattern))")
+    Page<Account> searchAllByKeyword(@Param("pattern") String pattern, Pageable pageable);
 
     @Query("SELECT a FROM Account a WHERE a.deleted = false AND a.status = :status " +
-           "AND (LOWER(a.username) LIKE LOWER(CONCAT('%', :kw, '%')) " +
-           "OR (a.companyName IS NOT NULL AND LOWER(a.companyName) LIKE LOWER(CONCAT('%', :kw, '%'))))")
-    List<Account> searchByStatus(@Param("status") AccountStatus status, @Param("kw") String kw);
+           "AND (LOWER(a.username) LIKE :pattern " +
+           "OR (a.companyName IS NOT NULL AND LOWER(a.companyName) LIKE :pattern))")
+    List<Account> searchByStatus(@Param("status") AccountStatus status, @Param("pattern") String pattern);
 
     @Query("SELECT a FROM Account a WHERE a.deleted = false " +
            "AND (:status IS NULL OR a.status = :status) " +
-           "AND (:kw IS NULL OR LOWER(a.username) LIKE LOWER(CONCAT('%', :kw, '%')) " +
-           "OR :kw IS NULL OR (a.companyName IS NOT NULL AND LOWER(a.companyName) LIKE LOWER(CONCAT('%', :kw, '%'))))")
+           "AND (:pattern IS NULL OR LOWER(a.username) LIKE :pattern " +
+           "OR :pattern IS NULL OR (a.companyName IS NOT NULL AND LOWER(a.companyName) LIKE :pattern))")
     Page<Account> searchAccounts(
             @Param("status") AccountStatus status,
-            @Param("kw") String kw,
+            @Param("pattern") String pattern,
             Pageable pageable);
 }
