@@ -1,11 +1,23 @@
 package com.logis.common.config;
 
+import com.logis.auth.entity.Account;
+import com.logis.auth.enums.AccountRole;
+import com.logis.auth.enums.AccountStatus;
+import com.logis.auth.repository.AccountRepository;
 import com.logis.auth.service.AccountService;
+import com.logis.wms.entity.Inventory;
+import com.logis.wms.entity.Location;
+import com.logis.wms.entity.Product;
+import com.logis.wms.enums.LocationType;
+import com.logis.wms.repository.InventoryRepository;
+import com.logis.wms.repository.LocationRepository;
+import com.logis.wms.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component
@@ -13,13 +25,97 @@ import org.springframework.stereotype.Component;
 public class DataInitializer implements ApplicationRunner {
 
     private final AccountService accountService;
+    private final AccountRepository accountRepository;
+    private final ProductRepository productRepository;
+    private final LocationRepository locationRepository;
+    private final InventoryRepository inventoryRepository;
 
     @Override
+    @Transactional
     public void run(ApplicationArguments args) {
-        try {
-            accountService.createInitialAdmin("admin", "admin1234");
-        } catch (Exception e) {
-            log.warn("초기 관리자 계정 생성 중 오류 (이미 존재할 수 있음): {}", e.getMessage());
+        // 관리자 계정
+        accountService.createInitialAdmin("admin", "admin1234");
+
+        // 데이터가 이미 있으면 스킵
+        if (accountRepository.count() > 1) {
+            log.info("더미 데이터 이미 존재 - 초기화 생략");
+            return;
         }
+
+        // 클라이언트 계정 2개 생성
+        Account client1 = createAccount("client1", "client1234", "삼성물산", AccountRole.CLIENT);
+        Account client2 = createAccount("client2", "client1234", "LG전자", AccountRole.CLIENT);
+
+        // 창고 구조: 창고 > 존 > 랙 > 빈
+        Location wh1 = createLocation(null, "WH-001", "서울 물류창고", LocationType.WAREHOUSE, client1);
+        Location zone1 = createLocation(wh1, "ZN-A", "A존", LocationType.ZONE, client1);
+        Location rack1 = createLocation(zone1, "RK-A1", "A1 랙", LocationType.RACK, client1);
+        Location bin1 = createLocation(rack1, "BN-A1-01", "A1-01 빈", LocationType.BIN, client1);
+        Location bin2 = createLocation(rack1, "BN-A1-02", "A1-02 빈", LocationType.BIN, client1);
+
+        Location wh2 = createLocation(null, "WH-001", "부산 물류창고", LocationType.WAREHOUSE, client2);
+        Location zone2 = createLocation(wh2, "ZN-A", "A존", LocationType.ZONE, client2);
+        Location rack2 = createLocation(zone2, "RK-A1", "A1 랙", LocationType.RACK, client2);
+        Location bin3 = createLocation(rack2, "BN-A1-01", "A1-01 빈", LocationType.BIN, client2);
+
+        // 상품 생성
+        Product p1 = createProduct(client1, "SKU-001", "노트북 15인치", "전자제품", "EA", 10);
+        Product p2 = createProduct(client1, "SKU-002", "무선 마우스", "전자제품", "EA", 20);
+        Product p3 = createProduct(client1, "SKU-003", "USB 허브", "전자제품", "EA", 15);
+        Product p4 = createProduct(client2, "SKU-001", "냉장고 600L", "가전제품", "EA", 5);
+        Product p5 = createProduct(client2, "SKU-002", "세탁기 드럼", "가전제품", "EA", 3);
+
+        // 재고 생성
+        createInventory(p1, bin1, 50);
+        createInventory(p2, bin1, 120);
+        createInventory(p3, bin2, 80);
+        createInventory(p4, bin3, 15);
+        createInventory(p5, bin3, 8);
+
+        log.info("더미 데이터 초기화 완료");
+    }
+
+    private Account createAccount(String username, String password, String companyName, AccountRole role) {
+        if (accountRepository.existsByUsername(username)) {
+            return accountRepository.findByUsername(username).orElseThrow();
+        }
+        Account a = new Account();
+        a.setUsername(username);
+        a.setPassword(password);
+        a.setCompanyName(companyName);
+        a.setRole(role);
+        a.setStatus(AccountStatus.APPROVED);
+        return accountRepository.save(a);
+    }
+
+    private Location createLocation(Location parent, String code, String name, LocationType type, Account account) {
+        Location loc = new Location();
+        loc.setAccount(account);
+        loc.setCode(code);
+        loc.setName(name);
+        loc.setType(type);
+        loc.setParent(parent);
+        loc.setActive(true);
+        return locationRepository.save(loc);
+    }
+
+    private Product createProduct(Account account, String sku, String name, String category, String unit, int safetyStock) {
+        Product p = new Product();
+        p.setAccount(account);
+        p.setSku(sku);
+        p.setName(name);
+        p.setCategory(category);
+        p.setUnit(unit);
+        p.setSafetyStock(safetyStock);
+        p.setDeleted(false);
+        return productRepository.save(p);
+    }
+
+    private void createInventory(Product product, Location location, int quantity) {
+        Inventory inv = new Inventory();
+        inv.setProduct(product);
+        inv.setLocation(location);
+        inv.setQuantity(quantity);
+        inventoryRepository.save(inv);
     }
 }
