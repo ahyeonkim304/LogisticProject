@@ -11,16 +11,16 @@
       gap: 8px;
       align-items: center;
       padding: 10px 12px;
-      background: var(--color-bg);
-      border: 1px solid var(--color-border);
-      border-radius: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
       margin-bottom: 6px;
     }
     .order-item-row .item-info { min-width: 0; }
-    .order-item-row .item-sku  { font-size: 12px; font-weight: 600; color: var(--color-primary); font-family: monospace; }
-    .order-item-row .item-name { font-size: 12px; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .order-item-row .item-sku  { font-size: 12px; font-weight: 600; color: var(--accent); font-family: monospace; }
+    .order-item-row .item-name { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .order-item-row .item-qty  { width: 72px; }
-    #item-list-empty { font-size: 13px; color: var(--color-muted); text-align: center; padding: 16px; border: 1px dashed var(--color-border); border-radius: 6px; }
+    #item-list-empty { font-size: 13px; color: var(--text-muted); text-align: center; padding: 16px; border: 1px dashed var(--border-mid); border-radius: var(--radius-sm); }
   </style>
 </head>
 <body>
@@ -38,29 +38,30 @@
         </div>
       </header>
 
-      <div class="tab-bar" style="margin-bottom:16px">
-        <button class="tab-btn active" onclick="setTab('',this)">전체</button>
-        <button class="tab-btn" onclick="setTab('ORDER_CREATED',this)">주문 생성</button>
-        <button class="tab-btn" onclick="setTab('ORDER_HOLD',this)">보류</button>
-        <button class="tab-btn" onclick="setTab('INBOUND_PENDING',this)">입고 대기</button>
-        <button class="tab-btn" onclick="setTab('INBOUND_COMPLETED',this)">입고 완료</button>
-        <button class="tab-btn" onclick="setTab('OUTBOUND_PENDING',this)">출고 대기</button>
-        <button class="tab-btn" onclick="setTab('OUTBOUND_COMPLETED',this)">출고 완료</button>
-        <button class="tab-btn" onclick="setTab('SHIPPED',this)">출하 완료</button>
-      </div>
-
       <div class="card">
-        <div class="card-body">
-          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-            <input id="filter-kw" class="form-control" placeholder="주문번호/SKU 검색" style="width:220px">
-            <button class="btn btn-secondary" onclick="load(0)">검색</button>
-          </div>
-          <table class="data-table">
-            <thead><tr><th>주문번호</th><th>SKU</th><th>상품명</th><th>수량</th><th>상태</th><th>등록일</th><th>관리</th></tr></thead>
-            <tbody id="order-body"><tr><td colspan="7" class="text-center text-muted">로딩 중...</td></tr></tbody>
-          </table>
-          <div id="pagination"></div>
+        <div class="tab-bar" style="padding:0 20px">
+          <button class="tab-btn active" onclick="setTab('',this)">전체</button>
+          <button class="tab-btn" onclick="setTab('ORDER_CREATED',this)">주문 생성</button>
+          <button class="tab-btn" onclick="setTab('ORDER_HOLD',this)">보류</button>
+          <button class="tab-btn" onclick="setTab('INBOUND_PENDING',this)">입고 대기</button>
+          <button class="tab-btn" onclick="setTab('INBOUND_COMPLETED',this)">입고 완료</button>
+          <button class="tab-btn" onclick="setTab('OUTBOUND_PENDING',this)">출고 대기</button>
+          <button class="tab-btn" onclick="setTab('OUTBOUND_COMPLETED',this)">출고 완료</button>
+          <button class="tab-btn" onclick="setTab('SHIPPED',this)">출하 완료</button>
         </div>
+        <div class="filter-bar">
+          <input id="filter-kw" class="form-control" placeholder="주문번호/고객명 검색" style="width:220px">
+          <button class="btn btn-secondary btn-sm" onclick="load(0)">검색</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetFilter()">초기화</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>주문번호</th><th>고객명</th><th>상품(건수)</th><th>상태</th><th>관리</th></tr></thead>
+            <tbody id="order-body"><tr><td colspan="5" class="text-center text-muted" style="padding:40px">로딩 중...</td></tr></tbody>
+          </table>
+          <div id="empty-area" style="display:none;flex:1"></div>
+        </div>
+        <div id="pagination"></div>
       </div>
     </div>
   </div>
@@ -128,13 +129,8 @@
 
 <script th:src="@{/js/app.js}"></script>
 <script>
-const BADGE = {
-  ORDER_CREATED:'badge-blue', ORDER_HOLD:'badge-yellow',
-  INBOUND_PENDING:'badge-purple', INBOUND_COMPLETED:'badge-green',
-  OUTBOUND_PENDING:'badge-orange', OUTBOUND_COMPLETED:'badge-teal', SHIPPED:'badge-gray'
-};
-let currentPage = 0, currentStatus = '', editingId = null;
-let allProducts = [], orderItems = []; // { sku, productName, quantity }
+let currentPage = 0, currentSize = 20, currentStatus = '', editingId = null;
+let allProducts = [], orderItems = [];
 
 /* ── 상품 목록 초기 로드 ── */
 async function loadProducts() {
@@ -253,26 +249,43 @@ async function submitPanel() {
   }
 }
 
+function resetFilter() {
+  document.getElementById('filter-kw').value = '';
+  currentStatus = '';
+  document.querySelectorAll('.tab-bar .tab-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  load(0);
+}
+
 /* ── 목록 로드 ── */
-async function load(page = 0) {
-  currentPage = page;
+async function load(page = 0, size = currentSize) {
+  currentPage = page; currentSize = size;
   const kw = document.getElementById('filter-kw').value.trim();
-  const params = `page=${page}&size=20${currentStatus ? '&status='+currentStatus : ''}${kw ? '&keyword='+encodeURIComponent(kw) : ''}`;
+  const params = `page=${page}&size=${size}${currentStatus ? '&status='+currentStatus : ''}${kw ? '&keyword='+encodeURIComponent(kw) : ''}`;
   try {
     const data = await apiFetch('GET', `/orders?${params}`);
     const rows = data.content ?? [];
-    document.getElementById('order-body').innerHTML = !rows.length
-      ? '<tr><td colspan="7" class="text-center text-muted">주문이 없습니다.</td></tr>'
-      : rows.map(r => `<tr>
-          <td><code>${escHtml(r.orderNumber)}</code></td>
-          <td><code>${escHtml(r.productSku)}</code></td>
-          <td>${escHtml(r.productName)}</td>
-          <td>${r.quantity}</td>
-          <td><span class="badge ${BADGE[r.status]||''}">${STATUS_LABELS[r.status]||r.status}</span></td>
-          <td>${fmtDate(r.createdAt)}</td>
+    const tbody = document.getElementById('order-body');
+    const emptyArea = document.getElementById('empty-area');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      emptyArea.style.display = 'flex';
+      emptyArea.innerHTML = renderEmptyState('조회된 주문이 없습니다', resetFilter);
+    } else {
+      emptyArea.style.display = 'none';
+      tbody.innerHTML = rows.map(r => {
+        const itemSummary = r.items && r.items.length
+          ? `${escHtml(r.items[0].productName || r.items[0].productSku)} 외 ${r.items.length-1}건`
+          : (r.productName || r.productSku || '-');
+        return `<tr>
+          <td><span class="font-mono" style="color:var(--accent)">${escHtml(r.orderNo || r.orderNumber)}</span></td>
+          <td>${escHtml(r.customerName) || '<span class="text-muted">-</span>'}</td>
+          <td>${escHtml(itemSummary)}</td>
+          <td>${statusBadge(r.status)}</td>
           <td>${actionBtns(r)}</td>
-        </tr>`).join('');
-    renderPagination(document.getElementById('pagination'), data, load);
+        </tr>`;
+      }).join('');
+    }
+    renderPagination(document.getElementById('pagination'), data, load, (s) => load(0, s));
   } catch (e) { showToast(e.message, 'error'); }
 }
 

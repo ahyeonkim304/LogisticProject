@@ -17,19 +17,21 @@
       </header>
 
       <div class="card">
-        <div class="card-body">
-          <div class="search-bar" style="margin-bottom:12px">
-            <input id="search-input" class="form-control" placeholder="SKU 또는 상품명 검색" style="max-width:280px">
-            <button class="btn btn-secondary" onclick="load(0)">검색</button>
-          </div>
+        <div class="filter-bar">
+          <input id="search-input" class="form-control" placeholder="SKU 또는 상품명 검색" style="width:260px">
+          <button class="btn btn-secondary btn-sm" onclick="load(0)">검색</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetFilter()">초기화</button>
+        </div>
+        <div class="table-wrap">
           <table class="data-table">
             <thead>
-              <tr><th>SKU</th><th>상품명</th><th>카테고리</th><th>단위</th><th>등록일</th><th>관리</th></tr>
+              <tr><th>SKU</th><th>상품명</th><th>카테고리</th><th>단위</th><th>안전재고</th><th>관리</th></tr>
             </thead>
-            <tbody id="product-body"><tr><td colspan="6" class="text-center text-muted">로딩 중...</td></tr></tbody>
+            <tbody id="product-body"><tr><td colspan="6" class="text-center text-muted" style="padding:40px">로딩 중...</td></tr></tbody>
           </table>
-          <div id="pagination"></div>
+          <div id="empty-area" style="display:none;flex:1"></div>
         </div>
+        <div id="pagination"></div>
       </div>
     </div>
   </div>
@@ -74,7 +76,12 @@
 
 <script th:src="@{/js/app.js}"></script>
 <script>
-let currentPage = 0, editingId = null;
+let currentPage = 0, currentSize = 20, editingId = null;
+
+function resetFilter() {
+  document.getElementById('search-input').value = '';
+  load(0);
+}
 
 function openPanel(mode, r) {
   editingId = mode === 'edit' ? r.id : null;
@@ -116,26 +123,33 @@ async function submitPanel() {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
-async function load(page = 0) {
-  currentPage = page;
+async function load(page = 0, size = currentSize) {
+  currentPage = page; currentSize = size;
   const kw = document.getElementById('search-input').value.trim();
   try {
-    const data = await apiFetch('GET', `/products?page=${page}&size=20${kw ? '&keyword=' + encodeURIComponent(kw) : ''}`);
+    const data = await apiFetch('GET', `/products?page=${page}&size=${size}${kw ? '&keyword=' + encodeURIComponent(kw) : ''}`);
     const rows = data.content ?? [];
-    document.getElementById('product-body').innerHTML = !rows.length
-      ? '<tr><td colspan="6" class="text-center text-muted">등록된 상품이 없습니다.</td></tr>'
-      : rows.map(r => `<tr>
-          <td><code>${escHtml(r.sku)}</code></td>
-          <td>${escHtml(r.name)}</td>
+    const tbody = document.getElementById('product-body');
+    const emptyArea = document.getElementById('empty-area');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      emptyArea.style.display = 'flex';
+      emptyArea.innerHTML = renderEmptyState('등록된 상품이 없습니다', resetFilter);
+    } else {
+      emptyArea.style.display = 'none';
+      tbody.innerHTML = rows.map(r => `<tr>
+          <td><span class="font-mono" style="color:var(--accent)">${escHtml(r.sku)}</span></td>
+          <td style="font-weight:500">${escHtml(r.name)}</td>
           <td>${escHtml(r.category) || '<span class="text-muted">-</span>'}</td>
           <td>${escHtml(r.unit) || '<span class="text-muted">-</span>'}</td>
-          <td>${fmtDate(r.createdAt)}</td>
-          <td>
-            <button class="btn btn-xs btn-secondary" onclick='openPanel("edit",${JSON.stringify(r)})'>수정</button>
-            <button class="btn btn-xs btn-danger" onclick="del(${r.id})">삭제</button>
+          <td>${r.safetyStock != null ? r.safetyStock : '<span class="text-muted">-</span>'}</td>
+          <td style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-secondary" onclick='openPanel("edit",${JSON.stringify(r)})'>수정</button>
+            <button class="btn btn-sm btn-danger" onclick="del(${r.id})">삭제</button>
           </td>
         </tr>`).join('');
-    renderPagination(document.getElementById('pagination'), data, load);
+    }
+    renderPagination(document.getElementById('pagination'), data, load, (s) => load(0, s));
   } catch (e) { showToast(e.message, 'error'); }
 }
 
