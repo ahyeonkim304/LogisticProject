@@ -2,7 +2,11 @@ package com.logis.wms.controller;
 
 import com.logis.auth.dto.SessionUser;
 import com.logis.wms.dto.dashboard.DashboardDto;
+import com.logis.wms.dto.dashboard.SafetyStockAlertDto;
+import com.logis.wms.dto.dashboard.TopProductDto;
+import com.logis.wms.dto.dashboard.ZoneCapacityDto;
 import com.logis.wms.service.DashboardService;
+import java.util.List;
 import javax.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +21,32 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
 
-    // 주문 현황·재고 통계·최근 입출고 로그를 포함한 대시보드 데이터를 반환한다
     @GetMapping
     public ResponseEntity<DashboardDto> getDashboard(HttpSession session) {
-        SessionUser user = (SessionUser) session.getAttribute("user");
-        Long accountId = (user != null && !user.isAdmin()) ? user.getId() : null;
+        Long accountId = resolveAccountId(session);
         return ResponseEntity.ok(dashboardService.getDashboard(accountId));
+    }
+
+    @GetMapping("/top-products")
+    public ResponseEntity<List<TopProductDto>> getTopProducts(HttpSession session) {
+        Long accountId = resolveAccountId(session);
+        return ResponseEntity.ok(dashboardService.getTopOutboundProducts(accountId));
+    }
+
+    @GetMapping("/zone-capacity")
+    public ResponseEntity<List<ZoneCapacityDto>> getZoneCapacity(HttpSession session) {
+        Long accountId = resolveAccountId(session);
+        return ResponseEntity.ok(dashboardService.getZoneCapacity(accountId));
+    }
+
+    @GetMapping("/safety-stock")
+    public ResponseEntity<List<SafetyStockAlertDto>> getSafetyStock(HttpSession session) {
+        Long accountId = resolveAccountId(session);
+        return ResponseEntity.ok(dashboardService.getSafetyStockAlerts(accountId));
+    }
+
+    private Long resolveAccountId(HttpSession session) {
+        SessionUser user = (SessionUser) session.getAttribute("user");
+        return (user != null && !user.isAdmin()) ? user.getId() : null;
     }
 }

@@ -4,6 +4,104 @@
   <meta charset="UTF-8">
   <title>대시보드 - WMS</title>
   <link rel="stylesheet" th:href="@{/css/style.css}">
+  <style>
+    /* ── 스탬프 카운터 ── */
+    .stamp-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stamp-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: box-shadow .15s, border-color .15s;
+      text-decoration: none;
+    }
+    .stamp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: var(--accent); }
+    .stamp-icon { font-size: 22px; margin-bottom: 6px; }
+    .stamp-value { font-size: 28px; font-weight: 700; line-height: 1; color: var(--text); }
+    .stamp-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; letter-spacing: .3px; }
+    .stamp-card.c-inbound  { border-top: 3px solid #3B82F6; }
+    .stamp-card.c-outbound { border-top: 3px solid #10B981; }
+    .stamp-card.c-hold     { border-top: 3px solid #F59E0B; }
+    .stamp-card.c-done     { border-top: 3px solid #6366F1; }
+    .stamp-card.c-shipped  { border-top: 3px solid #64748B; }
+
+    /* ── 하단 3열 위젯 그리드 ── */
+    .widget-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    .widget-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+    .widget-header {
+      padding: 14px 18px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .widget-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .widget-body { padding: 12px 18px; flex: 1; overflow: hidden; }
+
+    /* ── Top 5 ── */
+    .top-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .top-row:last-child { border-bottom: none; }
+    .top-rank { width: 20px; font-size: 11px; font-weight: 700; color: var(--text-muted); flex-shrink: 0; }
+    .top-rank.r1 { color: #F59E0B; }
+    .top-rank.r2 { color: #94A3B8; }
+    .top-rank.r3 { color: #B45309; }
+    .top-info { flex: 1; min-width: 0; }
+    .top-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .top-sku  { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+    .top-right { text-align: right; flex-shrink: 0; }
+    .top-qty  { font-size: 13px; font-weight: 600; color: var(--accent); }
+    .top-bar-wrap { margin-top: 3px; height: 3px; background: var(--border); border-radius: 2px; width: 60px; }
+    .top-bar { height: 100%; background: var(--accent); border-radius: 2px; }
+
+    /* ── Zone 적재율 ── */
+    .zone-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .zone-row:last-child { border-bottom: none; }
+    .zone-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+    .zone-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    .zone-pct  { font-size: 12px; font-weight: 600; }
+    .zone-sub  { font-size: 11px; color: var(--text-muted); margin-bottom: 5px; }
+    .zone-bar-track { height: 6px; background: var(--border); border-radius: 3px; }
+    .zone-bar-fill  { height: 100%; border-radius: 3px; transition: width .4s; }
+
+    /* ── 안전재고 경고 ── */
+    .alert-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .alert-row:last-child { border-bottom: none; }
+    .alert-info { flex: 1; min-width: 0; }
+    .alert-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .alert-sku  { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+    .alert-stock { font-size: 11px; color: var(--text-muted); }
+    .alert-deficit { font-size: 12px; font-weight: 700; color: #EF4444; min-width: 48px; text-align: right; }
+    .btn-replenish { font-size: 11px; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--accent); color: var(--accent); background: transparent; cursor: pointer; white-space: nowrap; }
+    .btn-replenish:hover { background: var(--accent); color: #fff; }
+
+    .widget-empty { text-align: center; padding: 32px 0; color: var(--text-muted); font-size: 13px; }
+
+    @media (max-width: 1100px) {
+      .stamp-grid { grid-template-columns: repeat(3, 1fr); }
+      .widget-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 720px) {
+      .stamp-grid { grid-template-columns: 1fr 1fr; }
+      .widget-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
 <div class="app-layout">
@@ -13,79 +111,170 @@
       <div id="toast-container" class="alert-container"></div>
       <header class="page-header">
         <h1 class="page-title">대시보드</h1>
+        <span style="font-size:12px;color:var(--text-muted)" id="refresh-time"></span>
       </header>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <span style="font-size:13px;font-weight:600;color:#374151">주문 현황</span>
-        <span style="font-size:11px;color:var(--color-muted)">기준: 전체 누적</span>
+      <!-- Widget 1: 입출고 상태 스탬프 -->
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;letter-spacing:.5px;text-transform:uppercase">주문 현황</div>
+      <div class="stamp-grid" id="stamp-grid">
+        <div class="stamp-card c-inbound"><div class="stamp-icon">📥</div><div class="stamp-value">-</div><div class="stamp-label">입고 대기</div></div>
+        <div class="stamp-card c-outbound"><div class="stamp-icon">📤</div><div class="stamp-value">-</div><div class="stamp-label">출고 대기</div></div>
+        <div class="stamp-card c-done"><div class="stamp-icon">✅</div><div class="stamp-value">-</div><div class="stamp-label">출고 완료</div></div>
+        <div class="stamp-card c-shipped"><div class="stamp-icon">🚚</div><div class="stamp-value">-</div><div class="stamp-label">출하 완료</div></div>
+        <div class="stamp-card c-hold"><div class="stamp-icon">⏸</div><div class="stamp-value">-</div><div class="stamp-label">보류</div></div>
       </div>
-      <div class="stats-grid" id="stats-grid"></div>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;margin-top:4px">
-        <span style="font-size:13px;font-weight:600;color:#374151">재고 / 입출고</span>
-        <span style="font-size:11px;color:var(--color-muted)">기준: 전체 누적</span>
-      </div>
-      <div class="summary-grid" id="summary-grid"></div>
+      <!-- Widgets 2/3/4 -->
+      <div class="widget-grid">
 
-      <div class="card">
-        <div class="card-header"><h2 class="card-title">최근 재고 변동 (10건)</h2></div>
-        <div class="card-body">
-          <table class="data-table">
-            <thead><tr><th>일시</th><th>SKU</th><th>상품명</th><th>유형</th><th>수량</th><th>참조</th></tr></thead>
-            <tbody id="log-body"><tr><td colspan="6" class="text-center text-muted">로딩 중...</td></tr></tbody>
-          </table>
+        <!-- Widget 2: 출고 다빈도 TOP 5 -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <span style="font-size:16px">📊</span>
+            <span class="widget-title">출고 다빈도 상품 TOP 5</span>
+          </div>
+          <div class="widget-body" id="top-products-body">
+            <div class="widget-empty">로딩 중...</div>
+          </div>
         </div>
+
+        <!-- Widget 3: 로케이션 적재율 -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <span style="font-size:16px">🗺️</span>
+            <span class="widget-title">구역별 적재율</span>
+          </div>
+          <div class="widget-body" id="zone-body">
+            <div class="widget-empty">로딩 중...</div>
+          </div>
+        </div>
+
+        <!-- Widget 4: 안전재고 부족 경고 -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <span style="font-size:16px">⚠️</span>
+            <span class="widget-title">안전재고 부족 품목</span>
+          </div>
+          <div class="widget-body" id="safety-body">
+            <div class="widget-empty">로딩 중...</div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 </div>
 <script th:src="@{/js/app.js}"></script>
 <script>
-const STATUS_LABELS = {
-  ORDER_CREATED:'주문 생성', ORDER_HOLD:'보류',
-  INBOUND_PENDING:'입고 대기', INBOUND_COMPLETED:'입고 완료',
-  OUTBOUND_PENDING:'출고 대기', OUTBOUND_COMPLETED:'출고 완료', SHIPPED:'출하 완료'
-};
-const STATUS_CLASSES = {
-  ORDER_CREATED:'stat-created', ORDER_HOLD:'stat-hold',
-  INBOUND_PENDING:'stat-inbound-pending', INBOUND_COMPLETED:'stat-inbound-done',
-  OUTBOUND_PENDING:'stat-outbound-pending', OUTBOUND_COMPLETED:'stat-outbound-done', SHIPPED:'stat-shipped'
-};
-async function load() {
-  const d = await apiFetch('GET','/dashboard');
+const STAMP_CONFIG = [
+  { key: 'INBOUND_PENDING',    cls: 'c-inbound',  icon: '📥', label: '입고 대기', href: '/inbound' },
+  { key: 'OUTBOUND_PENDING',   cls: 'c-outbound', icon: '📤', label: '출고 대기', href: '/outbound' },
+  { key: 'OUTBOUND_COMPLETED', cls: 'c-done',     icon: '✅', label: '출고 완료', href: '/outbound' },
+  { key: 'SHIPPED',            cls: 'c-shipped',  icon: '🚚', label: '출하 완료', href: '/outbound' },
+  { key: 'ORDER_HOLD',         cls: 'c-hold',     icon: '⏸', label: '보류',     href: '/orders' },
+];
+
+async function loadStamps() {
+  const d = await apiFetch('GET', '/dashboard');
   if (!d) return;
-  // 통계 카드
-  const statuses = ['ORDER_CREATED','INBOUND_PENDING','INBOUND_COMPLETED','OUTBOUND_PENDING','OUTBOUND_COMPLETED','SHIPPED'];
-  document.getElementById('stats-grid').innerHTML = statuses.map(s =>
-    `<div class="stat-card ${STATUS_CLASSES[s]}">
-      <div class="stat-label">${STATUS_LABELS[s]}</div>
-      <div class="stat-value">${(d.orderCountByStatus && d.orderCountByStatus[s]) ?? 0}</div>
-    </div>`).join('');
-  // 요약 카드
-  document.getElementById('summary-grid').innerHTML = [
-    {icon:'📦',label:'전체 재고',val:d.totalStock},
-    {icon:'📥',label:'총 입고 수량',val:d.totalInbound},
-    {icon:'📤',label:'총 출고 수량',val:d.totalOutbound}
-  ].map(({icon,label,val}) =>
-    `<div class="summary-card">
-      <div class="summary-icon">${icon}</div>
-      <div><div class="summary-label">${label}</div><div class="summary-value">${val ?? 0}</div></div>
-    </div>`).join('');
-  // 로그 테이블
-  const logs = d.recentLogs ?? [];
-  document.getElementById('log-body').innerHTML = !logs.length
-    ? '<tr><td colspan="6" class="text-center text-muted">재고 로그가 없습니다.</td></tr>'
-    : logs.map(l =>
-      `<tr>
-        <td>${fmtDate(l.createdAt)}</td>
-        <td><code>${escHtml(l.productSku)}</code></td>
-        <td>${escHtml(l.productName)}</td>
-        <td><span class="badge ${escHtml(l.typeBadgeClass)}">${escHtml(l.typeLabel)}</span></td>
-        <td>${l.quantity}</td>
-        <td>${l.referenceId ? `${escHtml(l.referenceType)} #${l.referenceId}` : '<span style="color:var(--color-muted)">직접 입력</span>'}</td>
-      </tr>`).join('');
+  const counts = d.orderCountByStatus || {};
+  document.getElementById('stamp-grid').innerHTML = STAMP_CONFIG.map(c =>
+    `<a class="stamp-card ${c.cls}" href="${c.href}">
+      <div class="stamp-icon">${c.icon}</div>
+      <div class="stamp-value">${(counts[c.key] ?? 0).toLocaleString()}</div>
+      <div class="stamp-label">${c.label}</div>
+    </a>`).join('');
 }
-load();
+
+async function loadTopProducts() {
+  const el = document.getElementById('top-products-body');
+  try {
+    const list = await apiFetch('GET', '/dashboard/top-products');
+    if (!list || !list.length) {
+      el.innerHTML = '<div class="widget-empty">출고 내역이 없습니다.</div>';
+      return;
+    }
+    const maxQty = list[0].totalQty || 1;
+    el.innerHTML = list.map((p, i) => {
+      const pct = Math.round((p.totalQty / maxQty) * 100);
+      const rankCls = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
+      return `<div class="top-row">
+        <div class="top-rank ${rankCls}">#${i + 1}</div>
+        <div class="top-info">
+          <div class="top-name">${escHtml(p.productName)}</div>
+          <div class="top-sku">${escHtml(p.sku)}</div>
+        </div>
+        <div class="top-right">
+          <div class="top-qty">${p.totalQty.toLocaleString()}</div>
+          <div class="top-bar-wrap"><div class="top-bar" style="width:${pct}%"></div></div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="widget-empty">조회 실패</div>';
+  }
+}
+
+async function loadZoneCapacity() {
+  const el = document.getElementById('zone-body');
+  try {
+    const list = await apiFetch('GET', '/dashboard/zone-capacity');
+    if (!list || !list.length) {
+      el.innerHTML = '<div class="widget-empty">등록된 구역이 없습니다.</div>';
+      return;
+    }
+    el.innerHTML = list.map(z => {
+      const pct = z.capacityPct;
+      const color = pct >= 90 ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#64748B';
+      return `<div class="zone-row">
+        <div class="zone-meta">
+          <span class="zone-name">${escHtml(z.zoneName)}</span>
+          <span class="zone-pct" style="color:${color}">${pct}%</span>
+        </div>
+        <div class="zone-sub">${z.occupiedBins} / ${z.totalBins} 빈 사용 중</div>
+        <div class="zone-bar-track">
+          <div class="zone-bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="widget-empty">조회 실패</div>';
+  }
+}
+
+async function loadSafetyStock() {
+  const el = document.getElementById('safety-body');
+  try {
+    const list = await apiFetch('GET', '/dashboard/safety-stock');
+    if (!list || !list.length) {
+      el.innerHTML = '<div class="widget-empty" style="color:#10B981">✅ 부족 품목 없음</div>';
+      return;
+    }
+    el.innerHTML = list.map(p =>
+      `<div class="alert-row">
+        <div class="alert-info">
+          <div class="alert-name">${escHtml(p.productName)}</div>
+          <div class="alert-sku">${escHtml(p.sku)}</div>
+          <div class="alert-stock">현재 ${p.currentStock} / 안전재고 ${p.safetyStock}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <span class="alert-deficit">-${p.deficit}</span>
+          <button class="btn-replenish" onclick="replenish(${p.productId})">보충 요청</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="widget-empty">조회 실패</div>';
+  }
+}
+
+function replenish(productId) {
+  showToast('보충 요청이 접수되었습니다. (상품 ID: ' + productId + ')', 'success');
+}
+
+document.getElementById('refresh-time').textContent =
+  '마지막 업데이트: ' + new Date().toLocaleTimeString('ko-KR');
+
+Promise.all([loadStamps(), loadTopProducts(), loadZoneCapacity(), loadSafetyStock()]);
 </script>
 </body>
 </html>
