@@ -7,10 +7,14 @@ import com.logis.auth.repository.AccountRepository;
 import com.logis.auth.service.AccountService;
 import com.logis.wms.entity.Inventory;
 import com.logis.wms.entity.Location;
+import com.logis.wms.entity.Order;
+import com.logis.wms.entity.OrderItem;
 import com.logis.wms.entity.Product;
 import com.logis.wms.enums.LocationType;
+import com.logis.wms.enums.OrderStatus;
 import com.logis.wms.repository.InventoryRepository;
 import com.logis.wms.repository.LocationRepository;
+import com.logis.wms.repository.OrderRepository;
 import com.logis.wms.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +33,7 @@ public class DataInitializer implements ApplicationRunner {
     private final ProductRepository productRepository;
     private final LocationRepository locationRepository;
     private final InventoryRepository inventoryRepository;
+    private final OrderRepository orderRepository;
 
     @Override
     @Transactional
@@ -72,6 +77,17 @@ public class DataInitializer implements ApplicationRunner {
         createInventory(p4, bin3, 15);
         createInventory(p5, bin3, 8);
 
+        // 주문 더미 데이터
+        createOrder(client1, "ORD-20260801-001", "김철수", OrderStatus.ORDER_CREATED, p1, 2, p2, 3);
+        createOrder(client1, "ORD-20260801-002", "이영희", OrderStatus.READY_TO_SHIP, p2, 1, p3, 5);
+        createOrder(client1, "ORD-20260802-001", "박민준", OrderStatus.SHIPPED, p1, 1, p3, 2);
+        createOrder(client1, "ORD-20260802-002", "최수진", OrderStatus.ORDER_HOLD, p2, 4, null, 0);
+        createOrder(client1, "ORD-20260803-001", "정다은", OrderStatus.OUTBOUND_PENDING, p3, 3, null, 0);
+
+        createOrder(client2, "ORD-20260801-001", "홍길동", OrderStatus.ORDER_CREATED, p4, 1, p5, 1);
+        createOrder(client2, "ORD-20260802-001", "강지훈", OrderStatus.SHIPPED, p4, 2, null, 0);
+        createOrder(client2, "ORD-20260803-001", "윤서연", OrderStatus.OUTBOUND_PENDING, p5, 1, null, 0);
+
         log.info("더미 데이터 초기화 완료");
     }
 
@@ -109,6 +125,33 @@ public class DataInitializer implements ApplicationRunner {
         p.setSafetyStock(safetyStock);
         p.setDeleted(false);
         return productRepository.save(p);
+    }
+
+    private void createOrder(Account account, String orderNo, String customerName,
+                             OrderStatus status, Product p1, int qty1, Product p2, int qty2) {
+        Order order = new Order();
+        order.setAccount(account);
+        order.setOrderNo(orderNo);
+        order.setCustomerName(customerName);
+        order.setStatus(status);
+        order.setDeleted(false);
+        orderRepository.save(order);
+
+        if (p1 != null && qty1 > 0) {
+            OrderItem item1 = new OrderItem();
+            item1.setOrder(order);
+            item1.setProduct(p1);
+            item1.setQuantity(qty1);
+            order.getItems().add(item1);
+        }
+        if (p2 != null && qty2 > 0) {
+            OrderItem item2 = new OrderItem();
+            item2.setOrder(order);
+            item2.setProduct(p2);
+            item2.setQuantity(qty2);
+            order.getItems().add(item2);
+        }
+        orderRepository.save(order);
     }
 
     private void createInventory(Product product, Location location, int quantity) {
