@@ -1,4 +1,4 @@
-﻿package com.logis.auth.dto;
+package com.logis.auth.dto;
 
 import com.logis.auth.entity.Account;
 import com.logis.auth.enums.AccountRole;

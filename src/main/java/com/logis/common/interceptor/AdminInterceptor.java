@@ -1,4 +1,4 @@
-﻿package com.logis.common.interceptor;
+package com.logis.common.interceptor;
 
 import com.logis.auth.dto.SessionUser;
 import javax.servlet.http.HttpServletRequest;

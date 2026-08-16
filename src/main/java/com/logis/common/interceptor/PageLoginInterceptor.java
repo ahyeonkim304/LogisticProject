@@ -1,4 +1,4 @@
-﻿package com.logis.common.interceptor;
+package com.logis.common.interceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
