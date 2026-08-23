@@ -21,6 +21,9 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     @Query("SELECT SUM(i.quantity) FROM Inventory i WHERE i.product.id = :productId")
     Long sumQuantityByProductId(@Param("productId") Long productId);
 
+    @Query("SELECT COUNT(i) FROM Inventory i WHERE i.product.id = :productId AND i.quantity > 0")
+    Long countLocationsByProductId(@Param("productId") Long productId);
+
     @Query("SELECT SUM(i.quantity) FROM Inventory i")
     Long sumTotalQuantity();
 

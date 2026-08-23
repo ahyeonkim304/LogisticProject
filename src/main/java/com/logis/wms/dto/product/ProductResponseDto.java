@@ -13,6 +13,7 @@ public class ProductResponseDto {
     private final String name;
     private final Integer safetyStock;
     private int currentStock;
+    private long locationCount;
 
     private ProductResponseDto(Product p) {
         this.id = p.getId();
@@ -30,6 +31,13 @@ public class ProductResponseDto {
     public static ProductResponseDto of(Product p, int currentStock) {
         ProductResponseDto dto = new ProductResponseDto(p);
         dto.currentStock = currentStock;
+        return dto;
+    }
+
+    public static ProductResponseDto of(Product p, int currentStock, long locationCount) {
+        ProductResponseDto dto = new ProductResponseDto(p);
+        dto.currentStock = currentStock;
+        dto.locationCount = locationCount;
         return dto;
     }
 

@@ -150,11 +150,11 @@ async function load(page = 0) {
     document.getElementById('inv-body').innerHTML = !rows.length
       ? '<tr><td colspan="5" class="text-center text-muted">재고가 없습니다.</td></tr>'
       : rows.map(r => `<tr>
-          <td><code>${escHtml(r.productSku)}</code></td>
-          <td>${escHtml(r.productName)}</td>
-          <td><strong>${r.totalQuantity}</strong></td>
+          <td><code>${escHtml(r.sku)}</code></td>
+          <td>${escHtml(r.name)}</td>
+          <td><strong>${r.currentStock ?? 0}</strong></td>
           <td>${r.locationCount ?? 0}</td>
-          <td>${fmtDate(r.lastUpdated)}</td>
+          <td><span class="text-muted">-</span></td>
         </tr>`).join('');
     renderPagination(document.getElementById('pagination'), data, load);
   } catch (e) { showToast(e.message, 'error'); }

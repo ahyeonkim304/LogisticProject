@@ -114,7 +114,8 @@ public class InventoryService {
         }
         return page.map(p -> {
             Long qty = inventoryRepository.sumQuantityByProductId(p.getId());
-            return ProductResponseDto.of(p, qty != null ? qty.intValue() : 0);
+            Long locCnt = inventoryRepository.countLocationsByProductId(p.getId());
+            return ProductResponseDto.of(p, qty != null ? qty.intValue() : 0, locCnt != null ? locCnt : 0L);
         });
     }
 
